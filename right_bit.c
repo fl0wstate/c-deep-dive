@@ -1,3 +1,4 @@
+#include <stddef.h>
 #include <stdio.h>
 
 /*
@@ -42,4 +43,30 @@ int main(void) {
   printf("%d\n", right_most_set_bit(8));
 
   return (0);
+}
+
+/*
+ * Create a function that will return the left most bit set
+ * this is all thanks to copilot
+ */
+int left_most_bit(int x) {
+  int count = 0;
+  while (x) {
+    x <<= 1;
+    count++;
+  }
+  return count;
+}
+
+/*
+ * Create a function that will return the left most bit set for negative numbers
+ */
+int left_most_bit_neg(int x) {
+  int count = 0;
+  x = x & (-x);
+  while (x) {
+    x <<= 1;
+    count++;
+  }
+  return count;
 }
