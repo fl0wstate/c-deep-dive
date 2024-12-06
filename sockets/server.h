@@ -4,6 +4,7 @@
 #include <errno.h>
 #include <netdb.h>
 #include <netinet/in.h>
+#include <poll.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -29,9 +30,30 @@
     fflush(stderr);                                                            \
     exit(1);                                                                   \
   }
+
+typedef enum LOG_LEVEL
+{
+  INFO,
+  DEBUG,
+  ERROR
+} logll;
+
 #define LOG(...)                                                               \
   {                                                                            \
     fprintf(stdout, __VA_ARGS__);                                              \
     fflush(stdout);                                                            \
   }
+
+uint32_t create_server(uint32_t port);
+void init_pollfd(struct pollfd *pollfds[], uint32_t *n_pollfds,
+                 int32_t server_fd, uint32_t *max_pollfds);
+void accept_connections(int server_fd, struct pollfd **pollfds,
+                        uint32_t *n_pollfds, uint32_t *max_pollfds);
+void read_from_client(struct pollfd **pollfds, uint32_t client_fd,
+                      uint32_t server_fd, uint32_t *n_pollfds);
+void add_clients_to_poll(struct pollfd *pollfds[], uint32_t new_client_fd,
+                         uint32_t *n_pollfds, uint32_t *max_pollfds);
+void del_client_from_poll(struct pollfd **pollfds, uint32_t *n_pollfds,
+                          uint32_t client_fd);
+
 #endif
