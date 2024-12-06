@@ -1,7 +1,9 @@
+#include "server.h"
 #include <fcntl.h>
 #include <netdb.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <sys/socket.h>
 
@@ -27,40 +29,30 @@ int socket_server(char *port)
   // getaddrinfo() returns a list of address structures
   status = getaddrinfo(NULL, port, &hints, &res);
   if (status != 0)
-  {
-    fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(status));
-    return -1;
-  }
+    on_error("getaddrinfo", gai_strerror(status));
 
   // socket() creates an endpoint for communication and returns a file
   // descriptor
   server_fd = socket(res->ai_family, res->ai_socktype, res->ai_protocol);
   printf("server_fd: %d\n", server_fd);
   if (server_fd == -1)
-  {
-    fprintf(stderr, "socket error: %s\n", strerror(server_fd));
-    return (-1);
-  }
+    on_error("socket", strerror(server_fd));
 
   // bind the provided node and services to the current socket
   bind_status = bind(server_fd, res->ai_addr, res->ai_addrlen);
   if (bind_status != 0)
-  {
-    fprintf(stderr, "bind error: %s\n", strerror(bind_status));
-    return (-2);
-  }
+    on_error("bind", strerror(bind_status));
 
   listen(server_fd, 2);
   addr_size = sizeof(struct sockaddr_storage);
   client_fd = accept(server_fd, (struct sockaddr *)&client_sock, &addr_size);
 
   if (client_fd == -1)
-  {
-    fprintf(stderr, "client error: %s\n", strerror(bind_status));
-    return (-3);
-  }
+    on_error("client", strerror(client_fd));
+
   fprintf(stderr, "New connection established, :%d, %d\n", server_fd,
           client_fd);
+
   freeaddrinfo(res);
   return server_fd;
 }
