@@ -14,6 +14,7 @@ class ChatClient:
 
     CSS = "cli.tcss"
 
+    # this will be where the users will insert
     def __init__(self, host: str = "127.0.0.1", port: int = 7000):
         self.host = host
         self.port = port
@@ -29,12 +30,12 @@ class ChatClient:
             self.username = username
             self.room = room
             self.connected = True
-            
+ 
             # Send initial connection message
             connect_msg = f"CONNECT|{username}|{room}".encode()
             writer.write(connect_msg)
             await writer.drain()
-            
+ 
             return reader, writer
         except Exception as e:
             self.connected = False
@@ -120,11 +121,10 @@ class ChatScreen(Screen):
         """Connect to the chat server."""
         try:
             self.reader, self.writer = await self.chat_client.connect(
-                self.app.username, 
+                self.app.username,
                 self.app.room
             )
             self.add_message("System", f"Connected to chat room: {self.app.room}", time.time())
-            
             # Start receiving messages
             worker = self.app.run_worker(self.receive_messages, start=True)
         except ConnectionError as e:
