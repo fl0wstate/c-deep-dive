@@ -1,17 +1,34 @@
 #!/usr/bin/env python3
 
-# its a cheat but will have to make it work
+import asyncio
+import websockets
 
-from socket import socket, AF_INET, SOCK_STREAM
+async def connect_to_server():
+    uri = "ws://localhost:8080"  # Change this to your server's URI
+    async with websockets.connect(uri) as websocket:
+        print("Connected to the WebSocket server")
 
-HOST = "127.0.0.1"
-PORT = 7000
+        async def send_periodic_messages():
+            while True:
+                message = "Hello, Server!"
+                await websocket.send(message)
+                print(f"Sent: {message}")
+                await asyncio.sleep(5)  # Send a message every 5 seconds
 
-while true:
-    with socket(AF_INET, SOCK_STREAM) as s:
-        s.connect((HOST, PORT))
-        s.sendall(b"Hello there i a python client")
-        data = s.recv(1024)
+        async def receive_messages():
+            while True:
+                try:
+                    response = await websocket.recv()
+                    print(f"Received: {response}")
+                except websockets.ConnectionClosed:
+                    print("Connection closed by the server")
+                    break
 
-print(f"Received: {data!r}")
+        # Run both sending and receiving concurrently
+        send_task = asyncio.create_task(send_periodic_messages())
+        receive_task = asyncio.create_task(receive_messages())
 
+        await asyncio.gather(send_task, receive_task)
+
+# Run the client
+asyncio.get_event_loop().run_until_complete(connect_to_server())
