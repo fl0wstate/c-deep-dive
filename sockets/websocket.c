@@ -1,5 +1,6 @@
 #include <arpa/inet.h>
 #include <openssl/bio.h>
+#include <openssl/bn.h>
 #include <openssl/buffer.h>
 #include <openssl/evp.h>
 #include <openssl/sha.h>
@@ -14,15 +15,6 @@
 #define GUID "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
 #define GUIDX "b8c4ba98-1aba-417e-b0f7-1faf0d2c6280"
 
-// ping resoponse
-char *ping(void)
-{
-  while (1)
-  {
-    sleep(2);
-    return ("PING...");
-  }
-}
 // Function to perform Base64 encoding
 char *base64_encode(const unsigned char *input, int length)
 {
@@ -105,6 +97,18 @@ void receive_text_frame(int client_fd)
   unsigned char masked = (buffer[1] & 0x80) != 0;
   unsigned char payload_len = buffer[1] & 0x7F;
 
+  if (opcode == 0x08)
+  {
+    printf("Client closed the tab.. server is shutting down\n");
+    close(client_fd);
+    exit(EXIT_SUCCESS);
+  }
+
+  if (opcode == 0x02)
+  {
+    printf("Client sent a binary data... most probably an image\n");
+  }
+
   int mask_offset = 2;
   int data_offset = masked ? 6 : 2; // Masking key is 4 bytes
 
@@ -129,7 +133,8 @@ void receive_text_frame(int client_fd)
     unsigned char *payload = &buffer[data_offset];
     char message[BUFFER_SIZE];
 
-    // Unmask the payload
+    // Unmask the payload, this is done to prevent caching of data.
+    // payload will be masked after each 4 bytes.
     for (int i = 0; i < payload_len; i++)
     {
       message[i] = payload[i] ^ mask[i % 4];
@@ -138,6 +143,7 @@ void receive_text_frame(int client_fd)
     message[payload_len] = '\0';
 
     printf("Received: %s\n", message);
+    printf("Opcode: %d\n", opcode);
     send_text_frame(client_fd, message);
   }
 }
