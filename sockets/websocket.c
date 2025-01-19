@@ -57,29 +57,77 @@ unsigned char *sha1_hash(const char *input, size_t length)
 }
 
 /* https://youtu.be/5tBmkxpeTyE */
-void send_text_frame(int client_fd, const char *message)
+void send_frame(int client_fd, const void *data, size_t data_len, int is_text)
 {
-  size_t message_len = strlen(message);
-  size_t frame_size = 2 + message_len;
-  char *frame = malloc(frame_size);
+  size_t header_len;
+  size_t frame_size;
+  char *frame;
 
+  // Calculate header size based on payload length
+  if (data_len <= 125)
+  {
+    header_len = 2; // Basic header
+  }
+  else if (data_len <= 65535)
+  {
+    header_len = 4; // Basic header + 2 bytes for 16-bit length
+  }
+  else
+  {
+    header_len = 10; // Basic header + 8 bytes for 64-bit length
+  }
+
+  frame_size = header_len + data_len;
+  frame = malloc(frame_size);
   if (frame == NULL)
   {
     perror("Failed to allocate memory");
     return;
   }
 
-  frame[0] = 0x81;
-  frame[1] = message_len;
+  // First byte: FIN bit + Opcode (0x1 for text, 0x2 for binary)
+  frame[0] = is_text ? 0x81 : 0x82;
 
-  memcpy(&frame[2], message, message_len);
+  // Set payload length and extended payload length bytes if needed
+  if (data_len <= 125)
+  {
+    frame[1] = data_len;
+  }
+  else if (data_len <= 65535)
+  {
+    frame[1] = 126;                    // Use 16-bit length
+    frame[2] = (data_len >> 8) & 0xFF; // High byte
+    frame[3] = data_len & 0xFF;        // Low byte
+  }
+  else
+  {
+    frame[1] = 127; // Use 64-bit length
+    // Store 64-bit length in network byte order (big-endian)
+    for (int i = 0; i < 8; i++)
+    {
+      frame[2 + i] = (data_len >> ((7 - i) * 8)) & 0xFF;
+    }
+  }
 
-  if (send(client_fd, frame, frame_size, 0) == -1)
+  // Copy payload data after the header
+  memcpy(&frame[header_len], data, data_len);
+
+  // Send the frame
+  ssize_t bytes_sent = send(client_fd, frame, frame_size, 0);
+  if (bytes_sent == -1)
   {
     perror("Failed to send message");
   }
+  else if ((size_t)bytes_sent < frame_size)
+  {
+    // Handle partial sends - in production you'd want to implement proper
+    // buffering
+    fprintf(stderr, "Warning: Incomplete frame sent\n");
+  }
+
   free(frame);
 }
+
 void receive_text_frame(int client_fd)
 {
   unsigned char buffer[BUFFER_SIZE];
@@ -144,12 +192,17 @@ void receive_text_frame(int client_fd)
 
     printf("Received: %s\n", message);
     printf("Opcode: %d\n", opcode);
-    send_text_frame(client_fd, message);
   }
 }
 
-int main()
+int main(int argc, char **argv)
 {
+
+  if (argc != 2)
+  {
+    fprintf(stderr, "Usage: %s <file.png>\n", argv[0]);
+    return 1;
+  }
   int server_fd, client_fd;
   struct sockaddr_in address;
   int addrlen = sizeof(address);
@@ -256,9 +309,36 @@ int main()
     printf("Handshake response sent.\n");
 
     // Send a welcome message
-    send_text_frame(client_fd, "Welcome to the C WebSocket Server!");
-    printf("client file descriptor: %d\n", client_fd);
+    char welcome_message[50] = "Welcome to the C Websocket Server";
+    send_frame(client_fd, welcome_message, strlen(welcome_message), 1);
 
+    //-----------------------------------------------------------
+    char *file_path = argv[1];
+    FILE *file = fopen(file_path, "rb");
+    if (!file)
+    {
+      perror("Failed to open file");
+      return (1);
+    }
+
+    fseek(file, 0, SEEK_END);
+    size_t file_size = ftell(file);
+    fseek(file, 0, SEEK_SET);
+
+    void *file_data = malloc(file_size);
+    if (!file_data)
+    {
+      perror("Failed to allocate memory for file");
+      fclose(file);
+      return (1);
+    }
+
+    fread(file_data, 1, file_size, file);
+    fclose(file);
+
+    //-----------------------------------------------------------
+
+    send_frame(client_fd, file_data, file_size, 0);
     // Receive and echo messages
     while (1)
     {
@@ -266,6 +346,7 @@ int main()
     }
 
     // Close client socket
+    free(file_data);
     close(client_fd);
   }
 
