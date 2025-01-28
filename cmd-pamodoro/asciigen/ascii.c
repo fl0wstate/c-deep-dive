@@ -1,10 +1,66 @@
 #include <math.h>
 #include <png.h>
+#include <stdarg.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <sys/types.h>
+#include <time.h>
+
+typedef enum LOG_LEVEL
+{
+  INFO,
+  DEBUG,
+  ERROR
+} logll;
+
+void LOG(logll level, const char *format, ...)
+{
+  va_list args;
+  time_t now;
+  struct tm *timeinfo;
+  char timestamp[20];
+
+  // get the time
+  time(&now);
+  // store the time in a timeinfo struct
+  timeinfo = localtime(&now);
+  // collect the relevant information from the timeinfo strcut
+  strftime(timestamp, 20, "%Y-%m-%d %H:%M:%S", timeinfo);
+
+  // prefix timestamps to the logs
+  switch (level)
+  {
+  case INFO:
+    fprintf(stdout, "[%s INFO] ", timestamp);
+    break;
+  case DEBUG:
+    fprintf(stdout, "[%s DEBUG] ", timestamp);
+    break;
+  case ERROR:
+    fprintf(stderr, "[%s ERROR] ", timestamp);
+    break;
+  }
+
+  va_start(args, format);
+  switch (level)
+  {
+  case INFO:
+  case DEBUG:
+    vfprintf(stdout, format, args);
+    break;
+  case ERROR:
+    vfprintf(stderr, format, args);
+    break;
+  }
+  va_end(args);
+}
 
 // Enhanced character set with 14 levels (0-13 indices)
-const char arr[] = " .,:;i1tfLCG08@"; // 14 characters + null terminator
+// const char arr[] = " .,:;i1tfLCG08@"; // 14 characters + null terminator
+const char arr[] = " .,:;ox%0@";
+// const char arr[] = "@0%xo;:,. ";
+// const char arr[] = "@80GCLft1i;:,. ";
 
 int main(int ac, char **av)
 {
@@ -78,10 +134,12 @@ int main(int ac, char **av)
   // ---------------------------------------------------------------
   // 1. Precision Scaling with Aspect Ratio Correction
   // ---------------------------------------------------------------
-  const int target_width = 80;      // Adjust for desired output width
-  const int target_height = 40;     // Maintain 2:1 aspect ratio
-  const double aspect_ratio = 10.0; // Terminal character aspect ratio
+  const int target_width = 100;   // Adjust for desired output width
+  const int target_height = 50;   // Maintain 2:1 aspect ratio
+  const double aspect_ratio = .9; // Terminal character aspect ratio
 
+  LOG(DEBUG, "Original Dimensions of the Image [%d, %d]\n", orig_width,
+      orig_height);
   // Calculate scaling factors with ceiling division
   int scale_x = (orig_width + target_width - 1) / target_width;
   int scale_y = (orig_height + target_height - 1) / target_height;
@@ -91,8 +149,8 @@ int main(int ac, char **av)
   scale_x = (int)(scale_x / aspect_ratio);
 
   // Ensure minimum scaling of 1
-  scale_x = scale_x < 4 ? 4 : scale_x;
-  scale_y = scale_y < 4 ? 4 : scale_y;
+  scale_x = scale_x < 1 ? 1 : scale_x;
+  scale_y = scale_y < 1 ? 1 : scale_y;
 
   // ---------------------------------------------------------------
   // 2. Memory-Safe Image Processing
@@ -136,6 +194,7 @@ int main(int ac, char **av)
   // ---------------------------------------------------------------
   // Edge-Preserving Sampling
   // ---------------------------------------------------------------
+  // TODO: Fix this error
   for (int y = 0; y < new_height; y++)
   {
     for (int x = 0; x < new_width; x++)
@@ -203,11 +262,15 @@ int main(int ac, char **av)
       const int num_chars = sizeof(arr) - 2;
       int index = (int)((brightness / 255.0) * num_chars);
       index = index < 0 ? 0 : (index >= num_chars ? num_chars - 1 : index);
-      // Print two characters for aspect ratio compensation
-      printf("%c%c", arr[index], arr[index]);
+      // Print two characters for aspect ratio compensation, while including the
+      // color
+      printf("\x1b[38;2;%d;%d;%dm%c\x1b[0m", (int)r_avg, (int)g_avg, (int)b_avg,
+             arr[index]);
     }
     printf("\n");
   }
+  LOG(DEBUG, "New Ascii Image Dimensions of the Image [%d, %d]\n", new_height,
+      new_width);
 
   // ---------------------------------------------------------------
   // 5. Cleanup
