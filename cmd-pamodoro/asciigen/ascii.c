@@ -4,6 +4,7 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <sys/types.h>
 #include <time.h>
 
@@ -32,7 +33,7 @@ void LOG(logll level, const char *format, ...)
   switch (level)
   {
   case INFO:
-    fprintf(stdout, "[%s INFO] ", timestamp);
+    // fprintf(stdout, "[%s INFO] ", timestamp);
     break;
   case DEBUG:
     fprintf(stdout, "[%s DEBUG] ", timestamp);
@@ -46,6 +47,7 @@ void LOG(logll level, const char *format, ...)
   switch (level)
   {
   case INFO:
+    break;
   case DEBUG:
     vfprintf(stdout, format, args);
     break;
@@ -64,10 +66,24 @@ const char arr[] = " .,:;ox%0@";
 
 int main(int ac, char **av)
 {
+  int color = 0;
   if (ac < 2)
   {
     fprintf(stderr, "Usage: %s <png-file>\n", av[0]);
     return EXIT_FAILURE;
+  }
+
+  // FILE *outfile = fopen("output.txt", "w");
+  if (ac >= 3 && strncmp(av[1], "--color", strlen("--color")) == 0 ||
+      strncmp(av[1], "-c", strlen("-c")) == 0)
+  {
+    color = 1;
+    av++;
+    // if (!outfile)
+    //{
+    //  fprintf(stderr, "Failed to open output file\n");
+    // exit(EXIT_FAILURE);
+    // }
   }
 
   FILE *file = fopen(av[1], "rb");
@@ -135,10 +151,10 @@ int main(int ac, char **av)
   // 1. Precision Scaling with Aspect Ratio Correction
   // ---------------------------------------------------------------
   const int target_width = 100;   // Adjust for desired output width
-  const int target_height = 50;   // Maintain 2:1 aspect ratio
-  const double aspect_ratio = .9; // Terminal character aspect ratio
+  const int target_height = 100;  // Maintain 2:1 aspect ratio
+  const double aspect_ratio = .8; // Terminal character aspect ratio
 
-  LOG(DEBUG, "Original Dimensions of the Image [%d, %d]\n", orig_width,
+  LOG(INFO, "Original Dimensions of the Image [%d, %d]\n", orig_width,
       orig_height);
   // Calculate scaling factors with ceiling division
   int scale_x = (orig_width + target_width - 1) / target_width;
@@ -194,7 +210,6 @@ int main(int ac, char **av)
   // ---------------------------------------------------------------
   // Edge-Preserving Sampling
   // ---------------------------------------------------------------
-  // TODO: Fix this error
   for (int y = 0; y < new_height; y++)
   {
     for (int x = 0; x < new_width; x++)
@@ -264,12 +279,19 @@ int main(int ac, char **av)
       index = index < 0 ? 0 : (index >= num_chars ? num_chars - 1 : index);
       // Print two characters for aspect ratio compensation, while including the
       // color
-      printf("\x1b[38;2;%d;%d;%dm%c\x1b[0m", (int)r_avg, (int)g_avg, (int)b_avg,
-             arr[index]);
+      if (color)
+      {
+        // fprintf(outfile, "\x1b[38;2;%d;%d;%dm%c%c\x1b[0m", (int)r_avg,
+        //        (int)g_avg, (int)b_avg, arr[index], arr[index]);
+        printf("\x1b[38;2;%d;%d;%dm%c%c\x1b[0m", (int)r_avg, (int)g_avg,
+               (int)b_avg, arr[index], arr[index]);
+      }
+      else
+        printf("%c%c", arr[index], arr[index]);
     }
     printf("\n");
   }
-  LOG(DEBUG, "New Ascii Image Dimensions of the Image [%d, %d]\n", new_height,
+  LOG(INFO, "New Ascii Image Dimensions of the Image [%d, %d]\n", new_height,
       new_width);
 
   // ---------------------------------------------------------------

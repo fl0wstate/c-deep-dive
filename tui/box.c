@@ -18,7 +18,7 @@ int main(void)
 
   /* box(win, 0, 0); */
   // rounded corners
-  wborder(win, 0, 0, 0, 0, '󱞫', '+', '+', '+');
+  wborder(win, 0, 0, 0, 0, '-', ' ', ' ', ' ');
   mvwprintw(win, 0, 2, "box");
   wrefresh(win);
 

@@ -8,6 +8,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/socket.h>
+#include <sys/types.h>
 #include <unistd.h>
 
 #define PORT 8080
@@ -191,6 +192,7 @@ void receive_text_frame(int client_fd)
     message[payload_len] = '\0';
 
     printf("Received: %s\n", message);
+    send_frame(client_fd, message, strlen(message), 1);
     printf("Opcode: %d\n", opcode);
   }
 }
@@ -248,7 +250,9 @@ int main(int argc, char **argv)
     printf("Connection established with %s:%d\n", inet_ntoa(address.sin_addr),
            ntohs(address.sin_port));
 
-    // Read handshake request
+    // -----------------------------Setting up to handle multiple connection to
+    // the server ---------------------// Read handshake request
+
     int valread = read(client_fd, buffer, BUFFER_SIZE);
     if (valread <= 0)
     {
@@ -338,7 +342,7 @@ int main(int argc, char **argv)
 
     //-----------------------------------------------------------
 
-    send_frame(client_fd, file_data, file_size, 0);
+    // send_frame(client_fd, file_data, file_size, 0);
     // Receive and echo messages
     while (1)
     {

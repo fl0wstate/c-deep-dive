@@ -56,6 +56,8 @@ uint32_t create_server(uint32_t port)
 
   server_addr.sin_family = AF_INET;
   server_addr.sin_addr.s_addr = INADDR_ANY;
+  // chaning the port from little edian to big edain which is the prefered mode
+  // of communication.
   server_addr.sin_port = htons(port);
 
   if (bind(server_fd, (struct sockaddr *)&server_addr, sizeof(server_addr)) < 0)
