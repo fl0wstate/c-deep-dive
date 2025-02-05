@@ -1,0 +1,20 @@
+# css config for the chat
+# by default the Screen uses the vertical attribute
+Screen {
+  layout: grid;
+  grid-size: 3;
+  # grid-columns: auto 1fr 1fr;
+  # grid-rows: 25% 75%;
+  # overflow-x: auto; # added when you want horizontal scrolling
+}
+
+#two {
+  column-span: 2;
+  row-span: 2;
+  tint: yellow 70%;
+}
+.box {
+  height: 100%;
+  # width: 1fr;
+  border: solid purple;
+}

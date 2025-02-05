@@ -1,0 +1,25 @@
+Screen {
+    box-sizing: border-box;
+  }
+
+Input {
+    margin: 1 1;
+    width: 100%;
+  }
+
+Horizontal {
+    border: solid white;
+    width: 100%;
+    height: 20%;
+    position: relative;
+  }
+
+Button {
+    margin: 1 1;
+    width: auto;
+
+  }
+Static {
+    margin: 1 1;
+    margin-bottom: auto;
+  }

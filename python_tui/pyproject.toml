@@ -1,0 +1,10 @@
+[project]
+name = "python-tui"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "textual>=1.0.0",
+    "textual-dev>=1.7.0",
+]
