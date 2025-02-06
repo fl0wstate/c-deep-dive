@@ -1,9 +1,13 @@
+import asyncio
 import time
 from textual.app import App, ComposeResult
 from textual.containers import ScrollableContainer, Grid
 from textual.screen import Screen, ModalScreen
 from textual.widgets import Header, Footer, Input, Static, Button, Label
 from rich.text import Text
+import websockets
+
+WS_URI="ws://127.0.0.1:8080"
 
 class Message(Static):
     """A widget representing an individual chat message."""
@@ -24,39 +28,76 @@ class Message(Static):
 class ChatScreen(Screen):
     """Main chat screen with message list and input field."""
     def compose(self) -> ComposeResult:
-        # yield Header(show_clock=True)
-        yield ScrollableContainer(id="message_container")
-        yield Input(placeholder="Type your message...", id="message_input")
-        yield Footer()
+        """Create child widgets for the app."""
+        yield ScrollableContainer(
+            id="messages_container",
+        )
+        yield Input(placeholder="Type a message...", id="message_input")
 
-    def on_mount(self) -> None:
-        # Add some initial messages
-        self.add_message("System", "Welcome to the chat room!", time.time())
-        self.add_message("Alice", "Hey everyone!", time.time() + 1)
-        self.add_message("Bob", "Hi there!", time.time() + 2)
+    async def on_mount(self) -> None:
+        """Start the WebSocket connection when the app mounts."""
+        self.styles.background = "black"
 
-    def on_input_submitted(self, message: Input.Submitted) -> None:
-        """Handle message submission."""
-        if message.value.strip():
-            self.add_message("You", message.value, time.time())
-            message.input.value = ""  # Clear input after sending
+        # Style the messages container
+        messages_container = self.query_one("#messages_container")
+        messages_container.styles.border = ("heavy", "white")
+        messages_container.styles.border = ("round", "yellow")
+        messages_container.styles.padding = (1, 2)
 
-    def add_message(self, username: str, content: str, timestamp: float) -> None:
-        """Add a new message to the chat container."""
+        self.websocket = await websockets.connect(WS_URI)
+        self.set_interval(1, self.receive_messages)  # Poll for incoming messages
 
-        # applying some modes to the input box
-        chat_box = self.query_one("#message_input")
-        chat_box.border_title = "Message"
-        chat_box.border_subtitle = "number of characters typed"
+    async def receive_messages(self) -> None:
+        """Receive messages from the WebSocket server."""
+        try:
+            messages_container = self.query_one("#messages_container")
+            messages_container.border_title = self.app.room
+            messages_container.border_subtitle = "CXfldajfla: 44"
+            messages_container.scroll_end()
+            message = await self.websocket.recv()
+            messages_container.mount(Message("undefined",message,time.time()))
+        except websockets.exceptions.ConnectionClosed:
+            self.query_one("#messages_container").mount(Message("undefined","error",time.time()))
+            self.app.exit()
 
-        message = Message(username, content, timestamp)
-        message_container = self.query_one("#message_container")
-        # adding details about the specified chat room
-        message_container.border_title = "Room Name"
-        message_container.border_subtitle = "44"
-        message_container.mount(message)
-        # Automatically scroll to the bottom
-        message_container.scroll_end()
+    async def on_input_submitted(self, event: Input.Submitted) -> None:
+        """Handle the input being submitted (e.g., pressing Enter)."""
+        message = event.value
+        if message:
+            if (message == "exit"):
+                self.websocket.close()
+                self.app.exit()
+            else:
+                await self.websocket.send(message)
+                self.query_one("#messages_container").mount(Message(self.app.username, message, time.time()))
+                self.query_one("#message_input", Input).value = ""  # Clear input
+
+    async def on_unmount(self) -> None:
+        """Close the WebSocket connection when the app unmounts."""
+        await self.websocket.close()
+
+class LoginScreen(Screen):
+    """This will be the loginScreen displayed before anything else"""
+    def compose(self) -> ComposeResult:
+        """Build up this screen when the script is runned"""
+        yield Grid(
+            Label("Enter username: ", id="username_label"),
+            Input(placeholder="Username...", id="username_input"),
+            Label("Enter room name: ", id="room_label"),
+            Input(placeholder="Room (default: General)", id="room_input"),
+            Button("Join", variant="primary", id="join-button"),
+            id="grid"
+        )
+    
+    def on_button_pressed(self, event: Button.Pressed) ->None:
+        """Handle the even when the button is pressed by the user"""
+        if event.button.id == "join-button":
+            username = self.query_one("#username_input").value
+            room = self.query_one("#room_input").value or "General"
+            if username:
+                self.app.username = username
+                self.app.room = room
+                self.app.push_screen("chat")
 
 class QuitScreen(ModalScreen):
     def compose(self) -> ComposeResult:
@@ -76,19 +117,19 @@ class QuitScreen(ModalScreen):
 class ChatApp(App):
     """The main Textual chat application."""
     SCREENS = {
+        "login": LoginScreen,
         "chat": ChatScreen,
         "quit": QuitScreen,
     }
     BINDINGS = [
-        ("ctrl+c", "request_quit", "Quit"),
+        ("ctrl+c", "request_quit", "quit"),
         ]
     CSS_PATH = "dialog.tcss"
 
     # setting up the user name should be done before mounting the chat room
     # provide some sort of a form that will allow users to fill in and make new chatroom
-
-    def on_mount(self) -> None:
-        self.push_screen("chat")
+    def on_mount(self) ->None:
+            self.push_screen("login")
 
     def action_request_quit(self) -> None:
         self.push_screen("quit")
