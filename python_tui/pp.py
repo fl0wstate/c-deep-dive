@@ -1,13 +1,15 @@
-import asyncio
 import time
+import json
+import zlib
+from textual import log
 from textual.app import App, ComposeResult
 from textual.containers import ScrollableContainer, Grid
 from textual.screen import Screen, ModalScreen
-from textual.widgets import Header, Footer, Input, Static, Button, Label
+from textual.widgets import Input, Static, Button, Label
 from rich.text import Text
 import websockets
 
-WS_URI="ws://127.0.0.1:8080"
+WS_URI="ws://127.0.0.1:6729"
 
 class Message(Static):
     """A widget representing an individual chat message."""
@@ -36,14 +38,7 @@ class ChatScreen(Screen):
 
     async def on_mount(self) -> None:
         """Start the WebSocket connection when the app mounts."""
-        self.styles.background = "black"
-
-        # Style the messages container
-        messages_container = self.query_one("#messages_container")
-        messages_container.styles.border = ("heavy", "white")
-        messages_container.styles.border = ("round", "yellow")
-        messages_container.styles.padding = (1, 2)
-
+        log("Hello there developer you are now inside the  chatscreen")
         self.websocket = await websockets.connect(WS_URI)
         self.set_interval(1, self.receive_messages)  # Poll for incoming messages
 
@@ -54,22 +49,39 @@ class ChatScreen(Screen):
             messages_container.border_title = self.app.room
             messages_container.border_subtitle = "CXfldajfla: 44"
             messages_container.scroll_end()
-            message = await self.websocket.recv()
-            messages_container.mount(Message("undefined",message,time.time()))
+            message_data = await self.websocket.recv()
+
+            if (isinstance(message_data, bytes)):
+                decompressed_data = zlib.decompress(message_data)
+                decompressed_data.decode("utf-8")
+                message = json.loads(decompressed_data)
+                messages_container.mount(Message(message["username"], message["message"], time.time()))
+
         except websockets.exceptions.ConnectionClosed:
-            self.query_one("#messages_container").mount(Message("undefined","error",time.time()))
+            self.query_one("#messages_container").mount(Message("System","error",time.time()))
             self.app.exit()
 
     async def on_input_submitted(self, event: Input.Submitted) -> None:
         """Handle the input being submitted (e.g., pressing Enter)."""
         message = event.value
+        #TODO: Capture the message, create a json object around it. Compress it send it as bytes.
         if message:
             if (message == "exit"):
-                self.websocket.close()
+                await self.websocket.close()
                 self.app.exit()
             else:
-                await self.websocket.send(message)
-                self.query_one("#messages_container").mount(Message(self.app.username, message, time.time()))
+                metadata = {
+                    "username": self.app.username,
+                    "message": message,
+                }
+                json_metadata = json.dumps(metadata, indent=4)
+                log(json_metadata)
+
+                # introduce the compression algorithm here
+                compressed_data =  zlib.compress(json_metadata.encode("utf-8"))
+                await self.websocket.send(compressed_data)
+
+                self.query_one("#messages_container").mount(Message(metadata["username"], metadata["message"] , time.time()))
                 self.query_one("#message_input", Input).value = ""  # Clear input
 
     async def on_unmount(self) -> None:
@@ -88,7 +100,7 @@ class LoginScreen(Screen):
             Button("Join", variant="primary", id="join-button"),
             id="grid"
         )
-    
+ 
     def on_button_pressed(self, event: Button.Pressed) ->None:
         """Handle the even when the button is pressed by the user"""
         if event.button.id == "join-button":
