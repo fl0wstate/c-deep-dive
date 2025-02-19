@@ -218,6 +218,9 @@ int broadcast_to_all_clients(struct pollfd **pollfds, void *message,
     // Skip the sender and the server socket (fd == 1)
     if ((*pollfds)[i].fd != client_fd && (*pollfds)[i].fd != 1) {
       LOG(DEBUG, "Broadcasting message to client_fd [%d]", (*pollfds)[i].fd);
+      LOG(DEBUG, "++++++++++++++++++++++++++++++++++++");
+      LOG(DEBUG, "%s", message);
+      LOG(DEBUG, "++++++++++++++++++++++++++++++++++++");
 
       // Send the frame and check for errors
       if (send_frame((*pollfds)[i].fd, message, strlen(message), 1) == -1) {
@@ -233,6 +236,20 @@ int broadcast_to_all_clients(struct pollfd **pollfds, void *message,
     }
   }
   return 0;
+}
+
+ssize_t send_all(int fd, void *buffer, size_t len) {
+  size_t total = 0;
+  const char *data = buffer;
+  while (total < len) {
+    ssize_t sent = write(fd, data + total, len - total);
+    if (sent < 0) {
+      LOG(ERROR, "Somthing happened");
+      return sent;
+    }
+    total += sent;
+  }
+  return total;
 }
 
 void broadcast_binaray_to_all_clients(struct pollfd *pollfds,
@@ -262,13 +279,14 @@ void broadcast_binaray_to_all_clients(struct pollfd *pollfds,
       header_len += 8;
     }
 
-    if (write(client_fd, frame_header, header_len) != header_len) {
+    if (send_all(client_fd, frame_header, header_len) != header_len) {
       LOG(ERROR, "Failed to send the frame_header to client_fd => [%d]",
           client_fd);
       continue;
     }
 
-    if (write(client_fd, binary_data, payload_len) != payload_len) {
+    LOG(DEBUG, "bin data: %d", payload_len);
+    if (send_all(client_fd, (void *)binary_data, payload_len) != payload_len) {
       LOG(ERROR, "Failed to send binary data to client_fd => [%d]", client_fd);
       continue;
     }
