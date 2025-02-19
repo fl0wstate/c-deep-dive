@@ -20,7 +20,7 @@
 
 #define PORT 6729
 #define BACKLOG 10
-#define BUFFER_SIZE 8192
+#define BUFFER_SIZE 4096
 #define GUID "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
 #define ANSI_RESET_ALL "\x1b[0m"
 #define ANSI_COLOR_BLACK "\x1b[30m"
@@ -58,7 +58,8 @@ void LOG(logll level, const char *format, ...) {
     fprintf(stdout, ANSI_COLOR_CYAN "%s:[DEBUG]", timestamp);
     break;
   case ERROR:
-    fprintf(stderr, ANSI_COLOR_RED "%s:[ERROR]", timestamp);
+    fprintf(stderr, ANSI_COLOR_RED "%s:[ERROR] [Line: %d]", timestamp,
+            __LINE__);
     break;
   }
 
@@ -234,6 +235,46 @@ int broadcast_to_all_clients(struct pollfd **pollfds, void *message,
   return 0;
 }
 
+void broadcast_binaray_to_all_clients(struct pollfd *pollfds,
+                                      const unsigned char *binary_data,
+                                      uint32_t payload_len, int sender_fd,
+                                      uint32_t n_pollfds) {
+  for (uint32_t i = 0; i < n_pollfds; i++) {
+    int client_fd = pollfds[i].fd;
+    if (sender_fd == client_fd || client_fd == 3)
+      continue;
+
+    unsigned char frame_header[10];
+    int header_len = 2;
+
+    frame_header[0] = 0x82;
+    if (payload_len <= 125) {
+      frame_header[1] = payload_len;
+    } else if (payload_len <= 65535) {
+      frame_header[1] = 126;
+      frame_header[2] = (payload_len >> 8) & 0xFF;
+      frame_header[3] = payload_len & 0xFF;
+      header_len += 2;
+    } else {
+      frame_header[1] = 127;
+      u_int64_t payload_len_64 = htobe64((u_int64_t)payload_len);
+      memcpy(&frame_header[2], &payload_len_64, 8);
+      header_len += 8;
+    }
+
+    if (write(client_fd, frame_header, header_len) != header_len) {
+      LOG(ERROR, "Failed to send the frame_header to client_fd => [%d]",
+          client_fd);
+      continue;
+    }
+
+    if (write(client_fd, binary_data, payload_len) != payload_len) {
+      LOG(ERROR, "Failed to send binary data to client_fd => [%d]", client_fd);
+      continue;
+    }
+  }
+}
+
 void send_pong(int client_fd, const unsigned char *payload,
                size_t payload_len) {
   unsigned char header[10];
@@ -350,10 +391,10 @@ int receive_text_frame(int client_fd, struct pollfd **pollfds,
   }
 
   // Handle Text frame (opcode 0x01) or Binary frame (opcode 0x02)
-  if (opcode == 0x01 || opcode == 0x02) {
+  if (opcode == 0x01) { // Text frame
     int mask_offset = 2;
     int data_offset = masked ? 6 : 2; // Masking key is 4 bytes
-    u_int64_t payload_len_64 = 0;
+    uint64_t payload_len_64 = 0;
 
     // Handle extended payload lengths
     if (payload_len == 126) {
@@ -373,13 +414,16 @@ int receive_text_frame(int client_fd, struct pollfd **pollfds,
         return -1;
       }
 
-      payload_len = (u_int32_t)be64toh(payload_len_64);
+      payload_len = (uint32_t)be64toh(payload_len_64);
       mask_offset = 10;
       data_offset = masked ? 14 : 10;
     }
 
-    if (payload_len >= (unsigned char)BUFFER_SIZE) {
+    if (payload_len >= BUFFER_SIZE) {
       LOG(ERROR, "Payload too large for buffer");
+      close(client_fd);
+      del_client_from_poll(pollfds, client_fd,
+                           n_pollfds); // Remove client from pollfd array
       return -1;
     }
 
@@ -394,17 +438,64 @@ int receive_text_frame(int client_fd, struct pollfd **pollfds,
       }
       message[payload_len] = '\0'; // Null-terminate the message
 
-      LOG(DEBUG, "Received from client [%d]: %s", client_fd, message);
+      LOG(DEBUG, "Received text from client [%d]: %s", client_fd, message);
 
-      // not sure what's the purpose of using the data param
-      // memcpy(data, message, payload_len);
-      // data[payload_len] = '\0'; // Null-terminate the data
-
-      // Echo the message back to the client
-      // if there is only one user in the server give hima shudown timer of
-      // about 5 min and then close the server send_frame(client_fd, message,
-      // payload_len, opcode);
+      // Broadcast or process as text
       broadcast_to_all_clients(pollfds, message, client_fd, n_pollfds);
+    }
+  } else if (opcode == 0x02) { // Binary frame
+    int mask_offset = 2;
+    int data_offset = masked ? 6 : 2; // Masking key is 4 bytes
+    uint64_t payload_len_64 = 0;
+
+    // Handle extended payload lengths
+    if (payload_len == 126) {
+      payload_len = (buffer[2] << 8) | buffer[3];
+      mask_offset = 4;
+      data_offset = masked ? 8 : 4;
+    } else if (payload_len == 127) {
+      if (recv(client_fd, &payload_len_64, 8, 0) != 8) {
+        LOG(ERROR,
+            "Failed to read the next 8 bits of information in the header from "
+            "client: %d",
+            client_fd);
+      }
+      if (payload_len_64 > UINT32_MAX) {
+        LOG(ERROR, "Payload length too large: %llu for client [%d]",
+            (unsigned long long)payload_len_64, client_fd);
+        return -1;
+      }
+      payload_len = (uint32_t)be64toh(payload_len_64);
+      mask_offset = 10;
+      data_offset = masked ? 14 : 10;
+    }
+
+    LOG(DEBUG, "payload_length: %d:    BUFFER_SIZE: %d", payload_len,
+        BUFFER_SIZE);
+    if (payload_len >= BUFFER_SIZE) {
+      LOG(ERROR, "Payload too large for buffer");
+      return -1;
+    }
+
+    if (masked) {
+      unsigned char *mask = &buffer[mask_offset];
+      unsigned char *binary_data = &buffer[data_offset];
+
+      // Unmask the payload
+      for (int i = 0; i < payload_len; i++) {
+        binary_data[i] ^= mask[i % 4];
+      }
+
+      LOG(DEBUG, "Received binary data from client [%d], length: %d", client_fd,
+          payload_len);
+      // Here you might want to process or broadcast binary data differently:
+      // For example, if you need to save it:
+      FILE *file = fopen("binary_output.bin", "wb");
+      fwrite(binary_data, 1, payload_len, file);
+      fclose(file);
+      // Or you might broadcast it differently:
+      broadcast_binaray_to_all_clients(*pollfds, binary_data, payload_len,
+                                       client_fd, *n_pollfds);
     }
   }
   return 0; // Success
