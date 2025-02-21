@@ -10,6 +10,7 @@
 #include <openssl/sha.h>
 #include <poll.h>
 #include <signal.h>
+#include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -58,8 +59,7 @@ void LOG(logll level, const char *format, ...) {
     fprintf(stdout, ANSI_COLOR_CYAN "%s:[DEBUG]", timestamp);
     break;
   case ERROR:
-    fprintf(stderr, ANSI_COLOR_RED "%s:[ERROR] [Line: %d]", timestamp,
-            __LINE__);
+    fprintf(stderr, ANSI_COLOR_RED "%s:[ERROR]", timestamp);
     break;
   }
 
@@ -318,14 +318,15 @@ void send_pong(int client_fd, const unsigned char *payload,
 
   header_len = index;
 
-  // Send the header
-  if (send(client_fd, header, header_len, 0) == -1) {
+  // Send the header completely
+  if (send_all(client_fd, header, header_len) != header_len) {
     perror("Failed to send Pong header");
     return;
   }
 
-  // Send the payload (if any)
-  if (payload_len > 0 && send(client_fd, payload, payload_len, 0) == -1) {
+  // Send the payload completely (if any)
+  if (payload_len > 0 &&
+      send_all(client_fd, payload, payload_len) != payload_len) {
     perror("Failed to send Pong payload");
     return;
   }
@@ -334,190 +335,260 @@ void send_pong(int client_fd, const unsigned char *payload,
 }
 
 /**
- * receive_text_frame: reads the clients data to a buffer and then broadcasts
-the data
- * to all the connected clients in the poll
- * @client_fd: the client file descriptor
- * @pollfds: pointer to a struct holding all the available connected clients in
-the poll array
- * @n_pollfds: pointer to the number of clients in the pollfd array
- * Return: 0 success, -1 failure
+ * read_n_bytes: helps in partial reading ensureing data i read completely
+ * @fd: client file descriptor we are reading data from
+ * @buff: where we are storing the data being read from the client_fd
+ * @n: number of bytes we need to read from the file descriptor
+ * Return: total number of bytes read from the client_fd, any negative value
+ * indicates an error
  */
+ssize_t read_n_bytes(int fd, unsigned char *buf, size_t n) {
+  size_t total = 0;
+  while (total < n) {
+    ssize_t bytes = read(fd, buf + total, n - total);
+    if (bytes < 0) {
+      // If error is EAGAIN/EWOULDBLOCK, break out and return what we got.
+      if (errno == EAGAIN || errno == EWOULDBLOCK) {
+        break;
+      }
+      return -1;
+    } else if (bytes == 0) {
+      // Connection closed.
+      break;
+    }
+    total += bytes;
+  }
+  return total;
+}
+
+// *************************************************************************
 int receive_text_frame(int client_fd, struct pollfd **pollfds,
                        uint32_t *n_pollfds) {
-  unsigned char buffer[BUFFER_SIZE] = {0};
-  int bytes_read = read(client_fd, buffer, sizeof(buffer));
-
-  if (bytes_read <= 0) {
-    if (bytes_read == 0) {
-      LOG(DEBUG, "Client [%d] disconnected", client_fd);
-    } else {
-      LOG(ERROR, "Failed to read from client [%d]: %s", client_fd,
-          strerror(errno));
-    }
-    close(client_fd);
-    del_client_from_poll(pollfds, client_fd,
-                         n_pollfds); // Remove client from pollfd array
-    return -1;                       // Indicate failure
+  size_t allocated = BUFFER_SIZE;
+  unsigned char *message_buffer = malloc(allocated);
+  if (!message_buffer) {
+    LOG(ERROR, "Malloc failed for message buffer");
+    return -1;
   }
 
-  unsigned char fin = (buffer[0] & 0x80) != 0;
-  unsigned char opcode = buffer[0] & 0x0F;
-  unsigned char masked = (buffer[1] & 0x80) != 0;
-  unsigned char payload_len = buffer[1] & 0x7F;
+  size_t total_payload = 0;
+  int finished = 0;
+  int initial_opcode = -1;
+  const int poll_timeout_ms = 1000;
 
-  LOG(DEBUG, "OPCODE: %d", opcode);
-  // Handle Ping frame (opcode 0x09)
-  if (opcode == 0x09) {
-    LOG(DEBUG, "Received ping from client [%d]", client_fd);
-    int mask_offset = 2;
-    int data_offset = masked ? 6 : 2;
-
-    if (payload_len == 126) {
-      payload_len = (buffer[2] << 8) | buffer[3];
-      mask_offset = 4;
-      data_offset = masked ? 8 : 4;
-    } else if (payload_len == 127) {
-      LOG(ERROR, "64-bit payload length not supported for client [%d]",
-          client_fd);
-      return -1; // Indicate failure
+  while (!finished) {
+    struct pollfd pfd = {.fd = client_fd, .events = POLLIN};
+    int poll_ret = poll(&pfd, 1, poll_timeout_ms);
+    if (poll_ret == 0) {
+      LOG(DEBUG, "Client [%d] idle; no data available", client_fd);
+      free(message_buffer);
+      return 0; // Idle client, no action needed
+    } else if (poll_ret < 0) {
+      LOG(ERROR, "Poll error for client [%d]: %s", client_fd, strerror(errno));
+      free(message_buffer);
+      close(client_fd);
+      del_client_from_poll(pollfds, client_fd, n_pollfds);
+      return -1;
+    } else if (pfd.revents & (POLLERR | POLLHUP | POLLNVAL)) {
+      LOG(DEBUG,
+          "Client [%d] disconnected or error detected by poll (revents: %d)",
+          client_fd, pfd.revents);
+      free(message_buffer);
+      close(client_fd);
+      del_client_from_poll(pollfds, client_fd, n_pollfds);
+      return -1;
     }
 
-    unsigned char payload[BUFFER_SIZE] = {0};
-    if (payload_len > 0) {
-      memcpy(payload, &buffer[data_offset], payload_len);
+    unsigned char header[14] = {0};
+    ssize_t header_bytes = read_n_bytes(client_fd, header, 2);
+    if (header_bytes == 0) {
+      LOG(DEBUG, "Client [%d] disconnected while reading header", client_fd);
+      free(message_buffer);
+      close(client_fd);
+      del_client_from_poll(pollfds, client_fd, n_pollfds);
+      return -1;
+    } else if (header_bytes < 0) {
+      LOG(ERROR, "Failed to read header from client [%d]: %s", client_fd,
+          strerror(errno));
+      free(message_buffer);
+      close(client_fd);
+      del_client_from_poll(pollfds, client_fd, n_pollfds);
+      return -1;
+    }
+
+    unsigned char fin = (header[0] & 0x80) != 0;
+    unsigned char opcode = header[0] & 0x0F;
+    unsigned char masked = (header[1] & 0x80) != 0;
+    unsigned char payload_len_field = header[1] & 0x7F;
+    int header_size = 2;
+    uint64_t payload_len = 0;
+
+    if (opcode == 0x09) {
+      LOG(DEBUG, "Ping payload active from client [%d]", client_fd);
+      if (payload_len_field == 126) {
+        if (read_n_bytes(client_fd, header + header_size, 2) != 2) {
+          LOG(ERROR, "Failed to read extended payload for ping from client: %d",
+              client_fd);
+          free(message_buffer);
+          return -1;
+        }
+        payload_len = (header[2] << 8) | header[3];
+        header_size += 2;
+      } else if (payload_len_field == 127) {
+        LOG(ERROR,
+            "64-bit payload length not supported for ping from client: %d",
+            client_fd);
+        free(message_buffer);
+        return -1;
+      } else {
+        payload_len = payload_len_field;
+      }
       if (masked) {
-        unsigned char *mask = &buffer[mask_offset];
-        for (int i = 0; i < payload_len; i++) {
-          payload[i] ^= mask[i % 4];
+        if (read_n_bytes(client_fd, header + header_size, 4) != 4) {
+          LOG(ERROR, "Failed to read mask for ping from client: %d", client_fd);
+          free(message_buffer);
+          return -1;
+        }
+        header_size += 4;
+      }
+      unsigned char *ping_payload = malloc(payload_len);
+      if (!ping_payload) {
+        LOG(ERROR, "Failed to allocate memory for ping_payload");
+        free(message_buffer);
+        return -1;
+      }
+      LOG(DEBUG, "Reading %llu bytes for ping payload",
+          (unsigned long long)payload_len);
+      if (read_n_bytes(client_fd, ping_payload, payload_len) != payload_len) {
+        LOG(ERROR, "Failed to read full ping payload from client: %d",
+            client_fd);
+        free(ping_payload);
+        free(message_buffer);
+        return -1;
+      }
+      if (masked) {
+        unsigned char *mask = header + (header_size - 4);
+        for (uint32_t i = 0; i < payload_len; i++) {
+          ping_payload[i] ^= mask[i % 4];
         }
       }
-    }
-    // send back the exact same ping payload
-    send_pong(client_fd, payload, payload_len);
-    LOG(DEBUG, "Pong sent to client [%d]", client_fd);
-    return (0);
-  }
-
-  // Handle Close frame (opcode 0x08)
-  if (opcode == 0x08) {
-    LOG(DEBUG, "Client [%d] sent a close frame", client_fd);
-    close(client_fd);
-    del_client_from_poll(pollfds, client_fd,
-                         n_pollfds); // Remove client from pollfd array
-    return -1;                       // Indicate failure
-  }
-
-  // Handle Text frame (opcode 0x01) or Binary frame (opcode 0x02)
-  if (opcode == 0x01) { // Text frame
-    int mask_offset = 2;
-    int data_offset = masked ? 6 : 2; // Masking key is 4 bytes
-    uint64_t payload_len_64 = 0;
-
-    // Handle extended payload lengths
-    if (payload_len == 126) {
-      payload_len = (buffer[2] << 8) | buffer[3];
-      mask_offset = 4;
-      data_offset = masked ? 8 : 4;
-    } else if (payload_len == 127) {
-      if (recv(client_fd, &payload_len_64, 8, 0) != 8) {
-        LOG(ERROR,
-            "Failed to read the next 8 bits of information in the header from "
-            "client: %d",
-            client_fd);
-      }
-      if (payload_len_64 > UINT32_MAX) {
-        LOG(ERROR, "Payload length too large: %llu for client [%d]",
-            (unsigned long long)payload_len_64, client_fd);
-        return -1;
-      }
-
-      payload_len = (uint32_t)be64toh(payload_len_64);
-      mask_offset = 10;
-      data_offset = masked ? 14 : 10;
+      send_pong(client_fd, ping_payload, payload_len);
+      LOG(DEBUG, "Sent a pong payload to client: %d", client_fd);
+      free(ping_payload);
+      // Continue waiting for further frames (ping frames do not complete a
+      // message)
+      continue;
     }
 
-    if (payload_len >= BUFFER_SIZE) {
-      LOG(ERROR, "Payload too large for buffer");
+    if (opcode == 0x08) {
+      LOG(DEBUG, "Client [%d] sent a close frame", client_fd);
+      free(message_buffer);
       close(client_fd);
-      del_client_from_poll(pollfds, client_fd,
-                           n_pollfds); // Remove client from pollfd array
+      del_client_from_poll(pollfds, client_fd, n_pollfds);
       return -1;
     }
 
-    if (masked) {
-      unsigned char *mask = &buffer[mask_offset];
-      unsigned char *payload = &buffer[data_offset];
-      char message[BUFFER_SIZE] = {0};
-
-      // Unmask the payload
-      for (int i = 0; i < payload_len; i++) {
-        message[i] = payload[i] ^ mask[i % 4];
-      }
-      message[payload_len] = '\0'; // Null-terminate the message
-
-      LOG(DEBUG, "Received text from client [%d]: %s", client_fd, message);
-
-      // Broadcast or process as text
-      broadcast_to_all_clients(pollfds, message, client_fd, n_pollfds);
-    }
-  } else if (opcode == 0x02) { // Binary frame
-    int mask_offset = 2;
-    int data_offset = masked ? 6 : 2; // Masking key is 4 bytes
-    uint64_t payload_len_64 = 0;
-
-    // Handle extended payload lengths
-    if (payload_len == 126) {
-      payload_len = (buffer[2] << 8) | buffer[3];
-      mask_offset = 4;
-      data_offset = masked ? 8 : 4;
-    } else if (payload_len == 127) {
-      if (recv(client_fd, &payload_len_64, 8, 0) != 8) {
-        LOG(ERROR,
-            "Failed to read the next 8 bits of information in the header from "
-            "client: %d",
+    if (opcode != 0x00 && initial_opcode == -1) {
+      if (opcode != 0x01 && opcode != 0x02) {
+        LOG(ERROR, "Unsupported opcode [%d] from client [%d]", opcode,
             client_fd);
-      }
-      if (payload_len_64 > UINT32_MAX) {
-        LOG(ERROR, "Payload length too large: %llu for client [%d]",
-            (unsigned long long)payload_len_64, client_fd);
+        free(message_buffer);
         return -1;
       }
-      payload_len = (uint32_t)be64toh(payload_len_64);
-      mask_offset = 10;
-      data_offset = masked ? 14 : 10;
+      initial_opcode = opcode;
     }
 
-    LOG(DEBUG, "payload_length: %d:    BUFFER_SIZE: %d", payload_len,
-        BUFFER_SIZE);
-    if (payload_len >= BUFFER_SIZE) {
-      LOG(ERROR, "Payload too large for buffer");
+    if (payload_len_field == 126) {
+      if (read_n_bytes(client_fd, header + header_size, 2) != 2) {
+        LOG(ERROR, "Incomplete 16-bit payload length from client [%d]",
+            client_fd);
+        free(message_buffer);
+        close(client_fd);
+        del_client_from_poll(pollfds, client_fd, n_pollfds);
+        return -1;
+      }
+      payload_len = (header[2] << 8) | header[3];
+      header_size += 2;
+    } else if (payload_len_field == 127) {
+      if (read_n_bytes(client_fd, header + header_size, 8) != 8) {
+        LOG(ERROR, "Incomplete 64-bit payload length from client [%d]",
+            client_fd);
+        free(message_buffer);
+        close(client_fd);
+        del_client_from_poll(pollfds, client_fd, n_pollfds);
+        return -1;
+      }
+      uint64_t len = 0;
+      memcpy(&len, header + header_size, 8);
+      payload_len = be64toh(len);
+      header_size += 8;
+    } else {
+      payload_len = payload_len_field;
+    }
+
+    if (masked) {
+      if (read_n_bytes(client_fd, header + header_size, 4) != 4) {
+        LOG(ERROR, "Failed to read mask from client [%d]", client_fd);
+        free(message_buffer);
+        close(client_fd);
+        del_client_from_poll(pollfds, client_fd, n_pollfds);
+        return -1;
+      }
+      header_size += 4;
+    }
+
+    if (total_payload + payload_len > allocated) {
+      allocated = total_payload + payload_len;
+      unsigned char *temp = realloc(message_buffer, allocated);
+      if (!temp) {
+        LOG(ERROR, "Memory reallocation failed");
+        free(message_buffer);
+        return -1;
+      }
+      message_buffer = temp;
+    }
+
+    if (read_n_bytes(client_fd, message_buffer + total_payload, payload_len) !=
+        payload_len) {
+      LOG(ERROR, "Failed to read payload from client [%d]", client_fd);
+      free(message_buffer);
+      close(client_fd);
+      del_client_from_poll(pollfds, client_fd, n_pollfds);
       return -1;
     }
 
     if (masked) {
-      unsigned char *mask = &buffer[mask_offset];
-      unsigned char *binary_data = &buffer[data_offset];
-
-      // Unmask the payload
-      for (int i = 0; i < payload_len; i++) {
-        binary_data[i] ^= mask[i % 4];
+      unsigned char *mask = header + (header_size - 4);
+      for (uint64_t i = 0; i < payload_len; i++) {
+        message_buffer[total_payload + i] ^= mask[i % 4];
       }
-
-      LOG(DEBUG, "Received binary data from client [%d], length: %d", client_fd,
-          payload_len);
-      // Here you might want to process or broadcast binary data differently:
-      // For example, if you need to save it:
-      FILE *file = fopen("binary_output.bin", "wb");
-      fwrite(binary_data, 1, payload_len, file);
-      fclose(file);
-      // Or you might broadcast it differently:
-      broadcast_binaray_to_all_clients(*pollfds, binary_data, payload_len,
-                                       client_fd, *n_pollfds);
     }
+
+    total_payload += payload_len;
+    finished = fin;
   }
-  return 0; // Success
+
+  if (initial_opcode == 0x01) {
+    unsigned char *temp = realloc(message_buffer, total_payload + 1);
+    if (!temp) {
+      LOG(ERROR, "Memory reallocation failed for null termination");
+      free(message_buffer);
+      return -1;
+    }
+    message_buffer = temp;
+    message_buffer[total_payload] = '\0';
+    LOG(DEBUG, "Received text from client [%d]: %s", client_fd, message_buffer);
+    broadcast_to_all_clients(pollfds, message_buffer, client_fd, n_pollfds);
+  } else if (initial_opcode == 0x02) {
+    LOG(DEBUG, "Received binary data from client [%d] of length %zu", client_fd,
+        total_payload);
+    broadcast_binaray_to_all_clients(*pollfds, message_buffer, total_payload,
+                                     client_fd, *n_pollfds);
+  }
+  free(message_buffer);
+  return 0;
 }
+// *************************************************************************
 
 /**
  * handle_handshake - Handle the initial handshake with the client
