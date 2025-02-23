@@ -17,11 +17,13 @@
 #include <string.h>
 #include <sys/socket.h>
 #include <sys/types.h>
+#include <threads.h>
 #include <unistd.h>
 
 #define PORT 6729
 #define BACKLOG 10
 #define BUFFER_SIZE 4096
+#define SMALL_BUFFER 200
 #define GUID "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
 #define ANSI_RESET_ALL "\x1b[0m"
 #define ANSI_COLOR_BLACK "\x1b[30m"
@@ -35,6 +37,7 @@
 
 typedef enum LOG_LEVEL { INFO, DEBUG, ERROR } logll;
 char *json_rendered_message(const char *sender, const char *message);
+void intro(int client_fd, uint32_t *n_pollfds);
 
 // handy tool i use to make make logs
 void LOG(logll level, const char *format, ...) {
@@ -131,6 +134,20 @@ void del_client_from_poll(struct pollfd **pollfds, int client_fd,
   }
 }
 
+ssize_t send_all(int fd, void *buffer, size_t len) {
+  size_t total = 0;
+  const char *data = buffer;
+  while (total < len) {
+    ssize_t sent = write(fd, data + total, len - total);
+    if (sent < 0) {
+      LOG(ERROR, "Somthing happened");
+      return sent;
+    }
+    total += sent;
+  }
+  return total;
+}
+
 int send_frame(int client_fd, const void *data, size_t data_len, int is_text) {
   size_t header_len;
   size_t frame_size;
@@ -203,6 +220,40 @@ int send_frame(int client_fd, const void *data, size_t data_len, int is_text) {
   return 0;
 }
 
+int send_bin_frame(int client_fd, const unsigned char *binary_data,
+                   uint32_t payload_len) {
+  unsigned char frame_header[10];
+  int header_len = 2;
+
+  frame_header[0] = 0x82;
+  if (payload_len <= 125) {
+    frame_header[1] = payload_len;
+  } else if (payload_len <= 65535) {
+    frame_header[1] = 126;
+    frame_header[2] = (payload_len >> 8) & 0xFF;
+    frame_header[3] = payload_len & 0xFF;
+    header_len += 2;
+  } else {
+    frame_header[1] = 127;
+    u_int64_t payload_len_64 = htobe64((u_int64_t)payload_len);
+    memcpy(&frame_header[2], &payload_len_64, 8);
+    header_len += 8;
+  }
+
+  if (send_all(client_fd, frame_header, header_len) != header_len) {
+    LOG(ERROR, "Failed to send the frame_header to client_fd => [%d]",
+        client_fd);
+    return -1;
+  }
+
+  LOG(DEBUG, "bin data: %d", payload_len);
+  if (send_all(client_fd, (void *)binary_data, payload_len) != payload_len) {
+    LOG(ERROR, "Failed to send binary data to client_fd => [%d]", client_fd);
+    return -1;
+  }
+  return (0);
+}
+
 /**
  * broadcast_to_all_clients: relays the message to all the connected clients
  * @pollfds: a pointer to an array of struct pollfds
@@ -218,10 +269,6 @@ int broadcast_to_all_clients(struct pollfd **pollfds, void *message,
     // Skip the sender and the server socket (fd == 1)
     if ((*pollfds)[i].fd != client_fd && (*pollfds)[i].fd != 1) {
       LOG(DEBUG, "Broadcasting message to client_fd [%d]", (*pollfds)[i].fd);
-      LOG(DEBUG, "++++++++++++++++++++++++++++++++++++");
-      LOG(DEBUG, "%s", message);
-      LOG(DEBUG, "++++++++++++++++++++++++++++++++++++");
-
       // Send the frame and check for errors
       if (send_frame((*pollfds)[i].fd, message, strlen(message), 1) == -1) {
         LOG(ERROR,
@@ -236,20 +283,6 @@ int broadcast_to_all_clients(struct pollfd **pollfds, void *message,
     }
   }
   return 0;
-}
-
-ssize_t send_all(int fd, void *buffer, size_t len) {
-  size_t total = 0;
-  const char *data = buffer;
-  while (total < len) {
-    ssize_t sent = write(fd, data + total, len - total);
-    if (sent < 0) {
-      LOG(ERROR, "Somthing happened");
-      return sent;
-    }
-    total += sent;
-  }
-  return total;
 }
 
 void broadcast_binaray_to_all_clients(struct pollfd *pollfds,
@@ -473,6 +506,7 @@ int receive_text_frame(int client_fd, struct pollfd **pollfds,
         }
       }
       send_pong(client_fd, ping_payload, payload_len);
+      // update_me(client_fd, n_pollfds);
       LOG(DEBUG, "Sent a pong payload to client: %d", client_fd);
       free(ping_payload);
       // Continue waiting for further frames (ping frames do not complete a
@@ -485,7 +519,7 @@ int receive_text_frame(int client_fd, struct pollfd **pollfds,
       free(message_buffer);
       close(client_fd);
       del_client_from_poll(pollfds, client_fd, n_pollfds);
-      return -1;
+      return 0;
     }
 
     if (opcode != 0x00 && initial_opcode == -1) {
@@ -662,6 +696,7 @@ void handle_handshake(int client_fd) {
 
   fprintf(stdout, "Handshake was succefull\n");
   // done setting up the handshake, websocket is now ready
+  // send_connection_count(client_fd, 22);
 }
 
 #define handle_errror(fd, msg)                                                 \
@@ -791,20 +826,40 @@ int accept_connections(int server_fd, struct pollfd **pollfds,
 
   // change the protocol to websockets communication
   handle_handshake(client_fd);
-
-  memset(&msg_buffer, 0, BUFFER_SIZE);
-  sprintf(msg_buffer,
-          "You have been connected to the server with the file descriptor: "
-          "[%d]",
-          client_fd);
-  // char *data =
-  //    json_rendered_message("System", "You are now connected to the
-  //    server!!");
-
-  /* send the message */
-  // send_frame(client_fd, (void *)&msg_buffer, strlen(msg_buffer), 1);
+  intro(client_fd, n_pollfds);
+  // get the current number of people connected to the chat room
+  // send it in json format
+  // add some information about the current connected user in the room
+  // add a banner for the chat room
   LOG(DEBUG, "Message sent to the client [%d]", client_fd);
   return (0);
+}
+
+/**
+ * intro -> this function will be only used when the stage is initalized
+ * @client_fd: current client file descriptor
+ * @n_pollfds: pointer to a memory address holding the actual value of connected
+ * clients Retur: void
+ */
+void intro(int client_fd, uint32_t *n_pollfds) {
+  char msg_buffer[SMALL_BUFFER] = {0};
+  char banner[] = "▄▄▄█████▓▄████▄  ██░ ██ ▄▄▄    ▄▄▄█████▓"
+                  "▓  ██▒ ▓▒██▀ ▀█ ▓██░ ██▒████▄  ▓  ██▒ ▓▒"
+                  "▒ ▓██░ ▒▒▓█    ▄▒██▀▀██▒██  ▀█▄▒ ▓██░ ▒░"
+                  "░ ▓██▓ ░▒▓▓▄ ▄██░▓█ ░██░██▄▄▄▄█░ ▓██▓ ░ "
+                  "  ▒██▒ ░▒ ▓███▀ ░▓█▒░██▓▓█   ▓██▒▒██▒ ░ "
+                  "  ▒ ░░  ░ ░▒ ▒  ░▒ ░░▒░▒▒▒   ▓▒█░▒ ░░   "
+                  "    ░     ░  ▒   ▒ ░▒░ ░ ▒   ▒▒ ░  ░    "
+                  "  ░     ░        ░  ░░ ░ ░   ▒   ░      "
+                  "        ░ ░      ░  ░  ░     ░  ░       "
+                  "        ░                               ";
+
+  memset(&msg_buffer, 0, strlen(msg_buffer));
+  sprintf(msg_buffer,
+          "{\"username\": \"server\", \"message\": \"Connection Update\", "
+          "\"connections\": %u}",
+          *n_pollfds);
+  send_frame(client_fd, (void *)msg_buffer, strlen(msg_buffer), 1);
 }
 
 // receive_text_frame
