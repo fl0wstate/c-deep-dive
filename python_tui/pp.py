@@ -41,20 +41,51 @@ class ChatScreen(Screen):
         log("Hello there developer you are now inside the  chatscreen")
         self.websocket = await websockets.connect(WS_URI)
         self.set_interval(1, self.receive_messages)  # Poll for incoming messages
+        banner = "\n".join([
+                "▄▄▄█████▓▄████▄  ██░ ██ ▄▄▄    ▄▄▄█████▓",
+                "▓  ██▒ ▓▒██▀ ▀█ ▓██░ ██▒████▄  ▓  ██▒ ▓▒",
+                "▒ ▓██░ ▒▒▓█    ▄▒██▀▀██▒██  ▀█▄▒ ▓██░ ▒░",
+                "░ ▓██▓ ░▒▓▓▄ ▄██░▓█ ░██░██▄▄▄▄█░ ▓██▓ ░ ",
+                "  ▒██▒ ░▒ ▓███▀ ░▓█▒░██▓▓█   ▓██▒▒██▒ ░ ",
+                "  ▒ ░░  ░ ░▒ ▒  ░▒ ░░▒░▒▒▒   ▓▒█░▒ ░░   ",
+                "    ░     ░  ▒   ▒ ░▒░ ░ ▒   ▒▒ ░  ░    ",
+                "  ░     ░        ░  ░░ ░ ░   ▒   ░      ",
+                "        ░ ░      ░  ░  ░     ░  ░       ",
+                "        ░                               "
+            ])
+        self.query_one("#messages_container").mount(Static(banner))
 
     async def receive_messages(self) -> None:
         """Receive messages from the WebSocket server."""
         try:
             messages_container = self.query_one("#messages_container")
             messages_container.border_title = self.app.room
-            messages_container.border_subtitle = "CXfldajfla: 44"
+            # messages_container.border_subtitle = ""
             messages_container.scroll_end()
             message_data = await self.websocket.recv()
 
-            if (isinstance(message_data, bytes)):
-                decompressed_data = zlib.decompress(message_data)
-                decompressed_data.decode("utf-8")
-                message = json.loads(decompressed_data)
+            if isinstance(message_data, bytes):
+                decompressor = zlib.decompressobj()
+                decompressed_data = decompressor.decompress(message_data)
+                # Flush any remaining decompressed data
+                decompressed_data += decompressor.flush()
+                # Decode the complete decompressed data to a string
+                if not decompressor.eof:
+                    log("Warning: Compressed data stream did not reach EOF; data might be incomplete.")
+                decoded_data = decompressed_data.decode("utf-8")
+                log(len(decoded_data))
+                log(type(decoded_data))
+
+                message = json.loads(decoded_data)
+ 
+                log("data received\n", message)
+                messages_container.mount(Message(message["username"], message["message"], time.time()))
+            else:
+                log("Receiving uncompressed data")
+                message = json.loads(message_data)
+
+                if ('connections' in message):
+                    messages_container.border_subtitle = str(message["connections"])
                 messages_container.mount(Message(message["username"], message["message"], time.time()))
 
         except websockets.exceptions.ConnectionClosed:
@@ -75,11 +106,18 @@ class ChatScreen(Screen):
                     "message": message,
                 }
                 json_metadata = json.dumps(metadata, indent=4)
-                log(json_metadata)
+                log("data sent\n", json_metadata)
 
-                # introduce the compression algorithm here
-                compressed_data =  zlib.compress(json_metadata.encode("utf-8"))
-                await self.websocket.send(compressed_data)
+                # this is just for testing we need to ensure that all the code of text frame works well on the server side
+                if (len(json_metadata) > 200):
+                    # introduce the compression algorithm here
+                    compressed_data =  zlib.compress(json_metadata.encode("utf-8"))
+                    await self.websocket.send(compressed_data)
+                    log(type(compressed_data))
+                else:
+                    log("sending uncompressed data")
+                    await self.websocket.send(json_metadata)
+
 
                 self.query_one("#messages_container").mount(Message(metadata["username"], metadata["message"] , time.time()))
                 self.query_one("#message_input", Input).value = ""  # Clear input
