@@ -78,7 +78,7 @@ int main(void) {
   redisReply *reply;
   int status = 0;
 
-  // make a simple connection to ethe database
+  // make a simple connection to the database
   c = redisConnect("127.0.0.1", 6379);
   if (c->err) {
     fprintf(stderr, "%s\n", c->errstr);
@@ -124,7 +124,7 @@ int main(void) {
   }
   freeReplyObject(reply);
 
-  // now lets go even deppper where we can be able to create an generic function
+  // now lets go even deeper where we can be able to create an generic function
   // that will be able to handle all the redis-cli funciton in a similar way in
   printf("====================================================================="
          "======\n");
