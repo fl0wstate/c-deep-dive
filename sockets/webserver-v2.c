@@ -3,6 +3,9 @@
 #include <cjson/cJSON.h>
 #include <endian.h>
 #include <errno.h>
+#include <hiredis/adapters/poll.h>
+#include <hiredis/async.h>
+#include <hiredis/hiredis.h>
 #include <openssl/bio.h>
 #include <openssl/bn.h>
 #include <openssl/buffer.h>
@@ -21,6 +24,7 @@
 #include <unistd.h>
 
 #define PORT 6729
+#define TIMEOUT 0.1
 #define BACKLOG 10
 #define BUFFER_SIZE 4096
 #define SMALL_BUFFER 200
@@ -35,6 +39,10 @@
 #define ANSI_COLOR_CYAN "\x1b[36m"
 #define ANSI_COLOR_WHITE "\x1b[37m"
 
+// make a global static var
+
+static u_int8_t exit_loop =
+    0; // this will be used to keep track of the changes made to the function
 typedef enum LOG_LEVEL { INFO, DEBUG, ERROR } logll;
 char *json_rendered_message(const char *sender, const char *message);
 void intro(int client_fd, uint32_t *n_pollfds);
@@ -118,6 +126,68 @@ unsigned char *sha1_hash(const char *input, size_t length) {
   SHA1((unsigned char *)input, length, hash);
   return hash;
 }
+
+// **********************************************************************************
+
+void connectCallback(const redisAsyncContext *ac, int status) {
+  if (status != REDIS_OK) {
+    fprintf(stderr, "Error: %s\n", ac->errstr);
+    exit_loop = 1;
+    return;
+  }
+  // otherwise the connecton was established
+  fprintf(stdout, "DEBUG: Connection established...\n");
+}
+
+void disconnectCallback(const redisAsyncContext *ac, int status) {
+  // update the status
+  exit_loop = 1;
+
+  if (status != REDIS_OK) {
+    fprintf(stderr, "Error while disconnecting: %s\n", ac->errstr);
+    return;
+  }
+  // everything happend correctly
+  fprintf(stdout, "dissconnected succefully\n");
+}
+
+void generic_callback(redisAsyncContext *ac, void *r, void *privatedata) {
+  redisReply *reply = r;
+
+  if (reply == NULL || ac->err) {
+    fprintf(stderr, "Error: %s", ac->errstr);
+    return;
+  }
+
+  fprintf(stdout, "%s\n", (char *)privatedata);
+
+  // handle the reply type accordingly
+  switch (reply->type) {
+  case REDIS_REPLY_INTEGER:
+    fprintf(stdout, "%lld\n", reply->integer);
+    break;
+  case REDIS_REPLY_ERROR:
+    fprintf(stderr, "Error: %s\n", reply->str);
+    break;
+  case REDIS_REPLY_STRING:
+    fprintf(stdout, "%s\n", reply->str);
+    break;
+  case REDIS_REPLY_ARRAY:
+    fprintf(stdout, "array len -> %zu\n", reply->elements);
+    for (size_t i = 0; i < reply->elements; i++)
+      fprintf(stdout, "-> %s\n", (char *)reply->element[i]->str);
+    break;
+  case REDIS_REPLY_STATUS:
+    fprintf(stdout, "-> %s\n", reply->str);
+    break;
+  default:
+    fprintf(stderr,
+            "somthing happened that's either an error or not handled\n");
+  }
+
+  // redisAsyncDisconnect(ac);
+}
+// **********************************************************************************
 
 // when the client is off we need update the pollfds list
 void del_client_from_poll(struct pollfd **pollfds, int client_fd,
@@ -828,6 +898,10 @@ int accept_connections(int server_fd, struct pollfd **pollfds,
   handle_handshake(client_fd);
   intro(client_fd, n_pollfds);
   // get the current number of people connected to the chat room
+  //
+  const char *set[] = {"SET", "system:userconnected", (const char *)n_pollfds};
+  // before everything go a wire!!!!!!!! commit
+  // redisAsyncCommandArgv();
   // send it in json format
   // add some information about the current connected user in the room
   // add a banner for the chat room
@@ -843,22 +917,12 @@ int accept_connections(int server_fd, struct pollfd **pollfds,
  */
 void intro(int client_fd, uint32_t *n_pollfds) {
   char msg_buffer[SMALL_BUFFER] = {0};
-  char banner[] = "▄▄▄█████▓▄████▄  ██░ ██ ▄▄▄    ▄▄▄█████▓"
-                  "▓  ██▒ ▓▒██▀ ▀█ ▓██░ ██▒████▄  ▓  ██▒ ▓▒"
-                  "▒ ▓██░ ▒▒▓█    ▄▒██▀▀██▒██  ▀█▄▒ ▓██░ ▒░"
-                  "░ ▓██▓ ░▒▓▓▄ ▄██░▓█ ░██░██▄▄▄▄█░ ▓██▓ ░ "
-                  "  ▒██▒ ░▒ ▓███▀ ░▓█▒░██▓▓█   ▓██▒▒██▒ ░ "
-                  "  ▒ ░░  ░ ░▒ ▒  ░▒ ░░▒░▒▒▒   ▓▒█░▒ ░░   "
-                  "    ░     ░  ▒   ▒ ░▒░ ░ ▒   ▒▒ ░  ░    "
-                  "  ░     ░        ░  ░░ ░ ░   ▒   ░      "
-                  "        ░ ░      ░  ░  ░     ░  ░       "
-                  "        ░                               ";
-
   memset(&msg_buffer, 0, strlen(msg_buffer));
   sprintf(msg_buffer,
-          "{\"username\": \"server\", \"message\": \"Connection Update\", "
+          "{\"username\": \"Server\", \"message\": \"Connection established "
+          "(>.o)\", "
           "\"connections\": %u}",
-          *n_pollfds);
+          client_fd);
   send_frame(client_fd, (void *)msg_buffer, strlen(msg_buffer), 1);
 }
 
@@ -881,11 +945,20 @@ int main(void) {
   if (status < 0)
     handle_errror(server_fd, "Listen...");
 
-  // to understand poll -> https://youtu.be/O-yMs3T0APU
   init_pollfd(&pollfds, &n_pollfds, server_fd, &max_pollfds);
+  redisAsyncContext *ac = redisAsyncConnect("127.0.0.1", 6379);
+  if (!ac || ac->err) {
+    fprintf(stderr, "Error: %s\n", ac->errstr);
+    redisAsyncFree(ac);
+    return (1);
+  }
 
+  // entere the while loop where async tends to start(not really async)
+  // to understand poll -> https://youtu.be/O-yMs3T0APU
   while (1) {
+    // this is where you will activate the redis poll even loop at
     is_active = poll(pollfds, n_pollfds, 2000);
+    redisPollTick(ac, TIMEOUT);
 
     if (is_active < 0) {
       LOG(ERROR, "Poll failed with the following error: %s",
@@ -933,5 +1006,6 @@ int main(void) {
   }
   LOG(DEBUG, "Cleaning up the pollfds...");
   clean_up_pollfd(&pollfds, &n_pollfds);
+  redisAsyncDisconnect(ac);
   return (0);
 }
