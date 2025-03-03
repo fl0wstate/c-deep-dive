@@ -42,12 +42,9 @@
 // make a global static var
 typedef struct connection {
   int connection;
-  // other data can be added here over the next
+  // other data can be added here: in cases of maintaining different chats
 } connect_st;
-static u_int8_t exit_loop =
-    0; // this will be used to keep track of the changes made to the function
 typedef enum LOG_LEVEL { INFO, DEBUG, ERROR } logll;
-char *json_rendered_message(const char *sender, const char *message);
 void intro(int client_fd, uint32_t *n_pollfds);
 
 // handy tool i use to make make logs
@@ -98,11 +95,11 @@ void LOG(logll level, const char *format, ...) {
 // redis callback function setup
 void connectCallback(const redisAsyncContext *ac, int status) {
   if (status != REDIS_OK) {
-    LOG(ERROR, "Error: %s\n", ac->errstr);
+    LOG(ERROR, "Error connecting to the redis server: %s", ac->errstr);
     return;
   }
   // otherwise the connecton was established
-  LOG(INFO, "Connection established...");
+  LOG(INFO, "Connection to the redis Database...");
 }
 
 void disconnectCallback(const redisAsyncContext *ac, int status) {
@@ -112,7 +109,7 @@ void disconnectCallback(const redisAsyncContext *ac, int status) {
     return;
   }
   // everything happend correctly
-  LOG(INFO, "dissconnected succefully");
+  LOG(INFO, "dissconnected from the redis Database succefully");
 }
 
 char *base64_encode(const unsigned char *input, int length) {
@@ -881,7 +878,6 @@ int accept_connections(int server_fd, struct pollfd **pollfds,
   // change the protocol to websockets communication
   handle_handshake(client_fd);
   intro(client_fd, n_pollfds);
-  // (**************************************************************************)
   if (*n_pollfds > 2) {
 
     char data[10]; // handle the case where there could be a bunch of people
@@ -905,24 +901,20 @@ int accept_connections(int server_fd, struct pollfd **pollfds,
     char message[SMALL_BUFFER] = {0};
     memset(&message, 0, strlen(message));
     sprintf(message,
-            "{\"username\": \"Server\", \"message\": \"New connections made!"
+            "{\"username\": \"Server\", \"message\": \"New connections made! "
             "(>.o)\", "
             "\"connections\": %u}",
             connected.connection);
 
-    // loop over all the necessary information
     for (uint32_t i = 0; i < *n_pollfds; i++) {
       // Skip the server socket (fd == 1)
       if ((*pollfds)[i].fd != 1) {
         LOG(DEBUG, "Broadcasting message to client_fd [%d]", (*pollfds)[i].fd);
-        // Send the frame and check for errors
         if (send_frame((*pollfds)[i].fd, message, strlen(message), 1) == -1) {
           LOG(ERROR,
               "Failed to send message to client_fd [%d]. Closing the "
               "connection.",
               (*pollfds)[i].fd);
-
-          // Close the client socket and remove it from the pollfd array
           close((*pollfds)[i].fd);
           del_client_from_poll(pollfds, (*pollfds)[i].fd, n_pollfds);
           i--;
@@ -930,7 +922,6 @@ int accept_connections(int server_fd, struct pollfd **pollfds,
       }
     }
   }
-  // (**************************************************************************)
   LOG(DEBUG, "Message sent to the client [%d]", client_fd);
   return (0);
 }
@@ -942,13 +933,14 @@ int accept_connections(int server_fd, struct pollfd **pollfds,
  * clients Retur: void
  */
 void intro(int client_fd, uint32_t *n_pollfds) {
+  struct connection connected_st;
   char msg_buffer[SMALL_BUFFER] = {0};
   memset(&msg_buffer, 0, strlen(msg_buffer));
   sprintf(msg_buffer,
           "{\"username\": \"Server\", \"message\": \"Connection established "
           "(>.o)\", "
           "\"connections\": %u}",
-          client_fd);
+          connected_st.connection);
   send_frame(client_fd, (void *)msg_buffer, strlen(msg_buffer), 1);
 }
 
