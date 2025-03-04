@@ -20,12 +20,11 @@
 #include <string.h>
 #include <sys/socket.h>
 #include <sys/types.h>
-#include <threads.h>
 #include <unistd.h>
 
 #define PORT 6729
 #define TIMEOUT 0.1
-#define BACKLOG 10
+#define BACKLOG 100
 #define BUFFER_SIZE 4096
 #define SMALL_BUFFER 200
 #define GUID "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
@@ -879,7 +878,6 @@ int accept_connections(int server_fd, struct pollfd **pollfds,
   handle_handshake(client_fd);
   intro(client_fd, n_pollfds);
   if (*n_pollfds > 2) {
-
     char data[10]; // handle the case where there could be a bunch of people
                    // online
     sprintf(data, "%u", *n_pollfds);
@@ -888,8 +886,8 @@ int accept_connections(int server_fd, struct pollfd **pollfds,
                           "Something needs a fixing over here privdata", 3, set,
                           NULL);
 
-    // call broadcast_to_all_clients here with the to update the number of
-    // clients set up the object to be sent over here and send the data
+    // fix the issue with the connection struct why does it keep on showing 5
+    // connecton when there are 2
     const char *get[] = {"GET", "user:connected"};
     redisAsyncCommandArgv(ac, generic_callback,
                           "getting the number of connected users", 2, get,
