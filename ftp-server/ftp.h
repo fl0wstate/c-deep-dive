@@ -9,24 +9,17 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/socket.h>
+#include <sys/types.h>
 #include <time.h>
 #include <unistd.h>
 
 typedef enum LOG_LEVEL
 {
   INFO,
+  PROMPT,
   DEBUG,
   ERROR,
 } logll;
-
-#define on_error(...)                                                          \
-  {                                                                            \
-    fprintf(stderr,                                                            \
-            "Error thrown by this %s func with the following code: %s\n",      \
-            __VA_ARGS__);                                                      \
-    fflush(stderr);                                                            \
-    exit(1);                                                                   \
-  }
 
 // ANSI_COLORS
 #define ANSI_RESET_ALL "\x1b[0m"
@@ -38,6 +31,12 @@ typedef enum LOG_LEVEL
 #define ANSI_COLOR_MAGENTA "\x1b[35m"
 #define ANSI_COLOR_CYAN "\x1b[36m"
 #define ANSI_COLOR_WHITE "\x1b[37m"
+
+#define BUFFSIZE 1064
+#define SMALL_BUFF 100
+
+// FLAGS
+#define REOF 0
 
 // LOGS
 void LOG(logll level, const char *format, ...);
