@@ -29,7 +29,7 @@ $(binary): $(obj) ftp.h
 
 
 clean:
-	rm -rf $(binary) server client cli $(wildcard ./*.o)
+	rm -rf $(binary) server client cli $(wildcard ./*.o) $(wildcard ./*.out)
 
 .PHONE: all clean server client cli
 
