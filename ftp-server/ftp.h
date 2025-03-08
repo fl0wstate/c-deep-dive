@@ -1,12 +1,16 @@
 #ifndef __FTP_H_H__
 #define __FTP_H_H__
 
+#include <arpa/inet.h>
+#include <fcntl.h>
 #include <netdb.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/socket.h>
 #include <time.h>
+#include <unistd.h>
 
 typedef enum LOG_LEVEL
 {
@@ -14,6 +18,15 @@ typedef enum LOG_LEVEL
   DEBUG,
   ERROR,
 } logll;
+
+#define on_error(...)                                                          \
+  {                                                                            \
+    fprintf(stderr,                                                            \
+            "Error thrown by this %s func with the following code: %s\n",      \
+            __VA_ARGS__);                                                      \
+    fflush(stderr);                                                            \
+    exit(1);                                                                   \
+  }
 
 // ANSI_COLORS
 #define ANSI_RESET_ALL "\x1b[0m"
@@ -28,5 +41,5 @@ typedef enum LOG_LEVEL
 
 // LOGS
 void LOG(logll level, const char *format, ...);
-
+int create_a_socket(char *port);
 #endif
