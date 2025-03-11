@@ -1,5 +1,5 @@
 #include "ftp.h"
-#include <stdlib.h>
+
 void ftp_execute_command(int socket_fd, char **command_line_args);
 
 // this will retun an array of tokenized argumenst passed by th user
@@ -32,11 +32,12 @@ char **ftp_commands(char *command_line_buffer, const char *delimiter)
         LOG(ERROR, "reallocation failed @%d", __LINE__);
         return NULL;
       }
-      command_token = strtok(NULL, delimiter);
     }
+    command_token = strtok(NULL, delimiter);
   }
 
   commands[position] = NULL;
+  LOG(DEBUG, "Position value is: %d");
 
   return (commands);
 }
@@ -97,6 +98,7 @@ void ftp_cli_parser()
   {
     char *command_line;
     char **command_line_args;
+    int commands_len = 0;
 
     fprintf(stdout, "ftp>> ");
     fflush(stdout);
@@ -107,6 +109,13 @@ void ftp_cli_parser()
       exit(EXIT_FAILURE);
     }
     fprintf(stdout, ANSI_COLOR_YELLOW "[OUT] %s" ANSI_RESET_ALL, command_line);
+
+    command_line_args = ftp_commands(command_line, FTP_DELIMITERS);
+    // checking if the length is correct
+
+    for (int i = 0; command_line_args[i] != NULL; i++)
+      fprintf(stdout, ANSI_COLOR_CYAN "[%s]\n" ANSI_RESET_ALL,
+              command_line_args[i]);
 
     free(command_line);
     free(command_line_args);
