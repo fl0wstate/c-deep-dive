@@ -19,7 +19,6 @@ int send_file(int socket_fd, const char *file_path)
 
   char filedata[file_length + 1];
   fread(filedata, sizeof(char), file_length, file);
-
   send(socket_fd, filedata, file_length, 0);
 
   fclose(file);
@@ -36,11 +35,19 @@ void execute_commands(int socket_fd, const char *command)
 
     byte_reads = recv(socket_fd, file_path, 100, 0);
 
-    if (send_file(socket_fd, file_path) == -1)
+    if (byte_reads > 0)
     {
-      LOG(ERROR, "You are cooked...");
-      // you are now kill the child process
-      exit(EXIT_FAILURE);
+      if (send_file(socket_fd, file_path) == -1)
+      {
+        LOG(ERROR, "You are cooked...");
+        // you are now kill the child process
+        exit(EXIT_FAILURE);
+      }
+    }
+    else
+    {
+      LOG(ERROR, "Error reading data from the connected file descriptor");
+      LOG(DEBUG, "You probably want to handle this correctly");
     }
   }
   else
@@ -106,6 +113,7 @@ int main(int argc, char *argv[])
     LOG(ERROR, "Error setting up the socket to the specified port");
     exit(EXIT_FAILURE);
   }
+
   LOG(INFO, "Socket creation succeded...");
 
   if (listen(server_socket, 10) < 0)
@@ -114,6 +122,7 @@ int main(int argc, char *argv[])
     exit(EXIT_FAILURE);
   }
 
+  LOG(INFO, "Socket is listening...");
   while (1)
   {
     // accept the incoming connection
@@ -130,6 +139,7 @@ int main(int argc, char *argv[])
     // multiprocessing
     if (!fork())
     {
+      LOG(DEBUG, "You are in the child process...");
       // you are in the child process
       close(server_socket);
 
@@ -140,6 +150,9 @@ int main(int argc, char *argv[])
         // read the data from that file descriptor
         byte_reads = recv(client_socket, command, 20, 0);
         // basically has to hold the command
+
+        LOG(DEBUG, "Command type: %s", command);
+
         if (byte_reads > 0)
           execute_commands(client_socket, command);
         // run the command

@@ -34,6 +34,8 @@ typedef enum LOG_LEVEL
 
 #define BUFFSIZE 1064
 #define SMALL_BUFF 100
+#define FTP_DELIMITERS "\t\r\n\a"
+#define FTP_TOKEN_BUFF 64
 
 // FLAGS
 #define REOF 0
