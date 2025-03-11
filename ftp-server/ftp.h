@@ -34,12 +34,13 @@ typedef enum LOG_LEVEL
 
 #define BUFFSIZE 1064
 #define SMALL_BUFF 100
-#define FTP_DELIMITERS "\t\r\n\a"
+#define FTP_DELIMITERS " \t\r\n\a"
 #define FTP_TOKEN_BUFF 64
 
 // FLAGS
 #define REOF 0
 
+extern int commands_len;
 // LOGS
 void LOG(logll level, const char *format, ...);
 int create_a_socket(char *port);
