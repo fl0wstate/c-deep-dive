@@ -58,45 +58,58 @@ void execute_commands(int socket_fd, const char *command)
 
 int create_a_socket(char *port)
 {
-  int socket_fd = 0, status = 0;
-  //* filter for the type of address info we want IPV4 or IPV6 */
-  struct addrinfo hints;
-  struct addrinfo *listips, *temp;
+  int socketfd;
+  struct addrinfo hints, *servinfo, *p;
 
-  memset(&hints, 0, sizeof hints);
-  hints.ai_family = AF_INET;       // type of ipv version
-  hints.ai_socktype = SOCK_STREAM; // data stream TCP
-  hints.ai_flags = AI_PASSIVE;     // create on from scratch
+  memset(&hints, 0, sizeof(hints));
+  hints.ai_family = AF_INET;       // IPv4
+  hints.ai_socktype = SOCK_STREAM; // TCP
+  hints.ai_flags = AI_PASSIVE;     // use own address
 
-  status = getaddrinfo(NULL, port, &hints, &listips);
+  int status = getaddrinfo(NULL, "20", &hints, &servinfo);
+
   if (status != 0)
   {
-    LOG(ERROR, "Error: %s", gai_strerror(status));
-    return -1;
+    fprintf(stderr, "server: getaddrinfo: %s\n", gai_strerror(status));
+    exit(1);
   }
 
-  temp = listips;
-  while (temp)
+  // loop through the list of endpoints we recieved from getaddrinfo.
+  for (p = servinfo; p != NULL; p = p->ai_next)
   {
-    socket_fd = socket(temp->ai_family, temp->ai_socktype, temp->ai_protocol);
-    if (socket_fd == -1)
+    // attempt to create the socket - IPv4 and TCP
+    socketfd = socket(p->ai_family, p->ai_socktype, p->ai_protocol);
+
+    if (socketfd == -1)
     {
-      LOG(ERROR, "Error while establishing a new socket for connection");
-      return -1;
-    }
-    // everything works out fine we need to bind it
-    if (bind(socket_fd, temp->ai_addr, temp->ai_addrlen) == 1)
-    {
-      LOG(ERROR, "Error binding the address to the socket_fd");
-      close(socket_fd);
+      perror("createConnection");
       continue;
     }
-    break;
-  }
-  free(listips);
-  return (socket_fd);
-}
 
+    // attempt to bind the socket
+    if (bind(socketfd, p->ai_addr, p->ai_addrlen) == -1)
+    {
+      close(socketfd);
+      perror("Failed to bind to specifed address.");
+      continue;
+    }
+
+    break;
+    // if both of those functions complete successfully then
+    // we successfully created the connection.
+  }
+
+  freeaddrinfo(servinfo);
+  if (p == NULL)
+  {
+    fprintf(stderr, "server: failed to bind to port %s\n", port);
+    exit(1);
+  }
+  else
+  {
+    return socketfd;
+  }
+}
 // sending files over the instructed connection
 // reading the command passed down by the client
 
