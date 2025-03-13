@@ -1,6 +1,105 @@
 #include "ftp.h"
+#include <netinet/in.h>
+#include <stdio.h>
 
-void ftp_execute_command(int socket_fd, char **command_line_args);
+char *ftp_banner =
+    "    ███████▓    ▒█████  █     █░ ██████▄▄▄█████▓▄▄▄    ▄▄▄█████▓█████  "
+    "\n  ▓██   ▓██▒   ▒██▒  ██▓█░ █ ░█▒██    ▒▓  ██▒ ▓▒████▄  ▓  ██▒ ▓▓█   ▀  "
+    "\n  ▒████ ▒██░   ▒██░  ██▒█░ █ ░█░ ▓██▄  ▒ ▓██░ ▒▒██  ▀█▄▒ ▓██░ ▒▒███    "
+    "\n  ░▓█▒  ▒██░   ▒██   ██░█░ █ ░█  ▒   ██░ ▓██▓ ░░██▄▄▄▄█░ ▓██▓ ░▒▓█  ▄  "
+    "\n  ░▒█░  ░██████░ ████▓▒░░██▒██▓▒██████▒▒ ▒██▒ ░ ▓█   ▓██▒▒██▒ ░░▒████▒ "
+    "\n   ▒ ░  ░ ▒░▓  ░ ▒░▒░▒░░ ▓░▒ ▒ ▒ ▒▓▒ ▒ ░ ▒ ░░   ▒▒   ▓▒█░▒ ░░  ░░ ▒░ ░ "
+    "\n   ░    ░ ░ ▒  ░ ░ ▒ ▒░  ▒ ░ ░ ░ ░▒  ░ ░   ░     ▒   ▒▒ ░  ░    ░ ░  ░ "
+    "\n   ░ ░    ░ ░  ░ ░ ░ ▒   ░   ░ ░  ░  ░   ░       ░   ▒   ░        ░    "
+    "\n            ░  ░   ░ ░     ░         ░               ░  ░         ░  ░ "
+    "\n                                                                     ";
+
+int connect_to_address(char *port, char *address)
+{
+  int socket_fd = -1, status = 0;
+  //* filter for the type of address info we want IPV4 or IPV6 */
+  struct addrinfo hints;
+  struct addrinfo *listips, *temp;
+
+  if (!address)
+  {
+    LOG(ERROR, "Invalid address");
+    return -1;
+  }
+
+  // address mutation to be the same as the network address order
+  struct sockaddr_in sa;
+  int result = inet_pton(AF_INET, address, &(sa.sin_addr));
+  return result;
+
+  memset(&hints, 0, sizeof hints);
+  hints.ai_family = AF_INET;       // type of ipv version
+  hints.ai_socktype = SOCK_STREAM; // data stream TCP
+  hints.ai_flags = AI_PASSIVE;     // create on from scratch
+
+  status = getaddrinfo(address, port, &hints, &listips);
+  if (status != 0)
+  {
+    LOG(ERROR, "Error: %s", gai_strerror(status));
+    return -1;
+  }
+
+  temp = listips;
+  for (; temp != NULL; temp = temp->ai_next)
+  {
+    socket_fd = socket(temp->ai_family, temp->ai_socktype, temp->ai_protocol);
+    if (socket_fd == -1)
+    {
+      LOG(ERROR, "Error while establishing a new socket for connection");
+      return -1;
+    }
+    // everything works out fine we need to bind it
+    if (connect(socket_fd, temp->ai_addr, temp->ai_addrlen) == -1)
+    {
+      LOG(ERROR, "Error connecting the address to the socket_fd");
+      close(socket_fd);
+      continue;
+    }
+    break;
+  }
+  LOG(DEBUG, "Connection established by this client: %d", socket_fd);
+  free(listips);
+  return (socket_fd);
+}
+
+int ftp_execute_command(int socket_fd, char **command_line_args)
+{
+  const char *command = command_line_args[0];
+
+  if (strcmp(command, "connect"))
+  {
+    char *address = command_line_args[1];
+    socket_fd = connect_to_address(address, PORT);
+    if (socket_fd == -1)
+    {
+      LOG(ERROR,
+          "There was an error establishing a connection to this address: %s",
+          address);
+    }
+    LOG(INFO, "Connection to the server has been established...");
+  }
+
+  if (strcmp(command, "help") == 0)
+  {
+    const char *helpString = "Welcome to the help page!";
+    fprintf(stdout, "%s\n", helpString);
+  }
+
+  if (strcmp(command, "exit") == 0)
+  {
+    LOG(INFO, "Bye!");
+    // ensure the conneciton is closed
+    close(socket_fd);
+    return 1;
+  }
+
+  return (0);
+}
 
 // this will retun an array of tokenized argumenst passed by th user
 char **ftp_commands(char *command_line_buffer, const char *delimiter)
@@ -37,7 +136,6 @@ char **ftp_commands(char *command_line_buffer, const char *delimiter)
   }
 
   commands[position] = NULL;
-  LOG(DEBUG, "Position value is: %d");
 
   return (commands);
 }
@@ -94,6 +192,11 @@ char *ftp_getline(int len, FILE *stream)
 // handling the commands inputed by the user
 void ftp_cli_parser()
 {
+  fprintf(stdout, "%s", ftp_banner);
+  putchar('\n');
+
+  int socket_fd = 0;
+
   while (1)
   {
     char *command_line;
@@ -108,14 +211,24 @@ void ftp_cli_parser()
       LOG(ERROR, "Parser Failed closing this interactive ftp shell");
       exit(EXIT_FAILURE);
     }
-    fprintf(stdout, ANSI_COLOR_YELLOW "[OUT] %s" ANSI_RESET_ALL, command_line);
+    // fprintf(stdout, ANSI_COLOR_YELLOW "[OUT] %s" ANSI_RESET_ALL,
+    // command_line);
 
     command_line_args = ftp_commands(command_line, FTP_DELIMITERS);
     // checking if the length is correct
 
-    for (int i = 0; command_line_args[i] != NULL; i++)
-      fprintf(stdout, ANSI_COLOR_CYAN "[%s]\n" ANSI_RESET_ALL,
-              command_line_args[i]);
+    /*for (int i = 0; command_line_args[i] != NULL; i++)*/
+    /*  fprintf(stdout, ANSI_COLOR_CYAN "[%s]\n" ANSI_RESET_ALL,*/
+    /*          command_line_args[i]);*/
+
+    // testing out first
+    if (ftp_execute_command(socket_fd, command_line_args) == 1)
+    {
+      LOG(INFO, "Cleaning up...");
+      free(command_line);
+      free(command_line_args);
+      exit(EXIT_SUCCESS);
+    }
 
     free(command_line);
     free(command_line_args);
