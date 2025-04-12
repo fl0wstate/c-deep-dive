@@ -37,7 +37,7 @@ typedef enum LOG_LEVEL
 #define FTP_DELIMITERS " \t\r\n\a"
 #define FTP_TOKEN_BUFF 64
 
-#define PORT "20"
+#define PORT "1990"
 // FLAGS
 #define REOF 0
 

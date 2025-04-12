@@ -14,16 +14,16 @@ void LOG(logll level, const char *format, ...)
   switch (level)
   {
   case INFO:
-    fprintf(stdout, ANSI_COLOR_GREEN "%s:[INFO]", timestamp);
+    fprintf(stdout, ANSI_COLOR_GREEN "%s:[INFO]" ANSI_RESET_ALL, timestamp);
     break;
   case PROMPT:
-    fprintf(stdout, ANSI_COLOR_YELLOW "%s:[SHELL]", timestamp);
+    fprintf(stdout, ANSI_COLOR_YELLOW "%s:[SHELL]" ANSI_RESET_ALL, timestamp);
     break;
   case DEBUG:
-    fprintf(stdout, ANSI_COLOR_CYAN "%s:[DEBUG]", timestamp);
+    fprintf(stdout, ANSI_COLOR_CYAN "%s:[DEBUG]" ANSI_RESET_ALL, timestamp);
     break;
   case ERROR:
-    fprintf(stderr, ANSI_COLOR_RED "%s:[ERROR]", timestamp);
+    fprintf(stderr, ANSI_COLOR_RED "%s:[ERROR]" ANSI_RESET_ALL, timestamp);
     break;
   }
 

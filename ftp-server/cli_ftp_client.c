@@ -1,4 +1,5 @@
 #include "ftp.h"
+#include <netdb.h>
 #include <netinet/in.h>
 #include <stdio.h>
 
@@ -14,7 +15,7 @@ char *ftp_banner =
     "\n            ░  ░   ░ ░     ░         ░               ░  ░         ░  ░ "
     "\n                                                                     ";
 
-int connect_to_address(char *port, char *address)
+int connect_to_address(char *address, char *port)
 {
   int socket_fd = -1, status = 0;
   //* filter for the type of address info we want IPV4 or IPV6 */
@@ -28,9 +29,14 @@ int connect_to_address(char *port, char *address)
   }
 
   // address mutation to be the same as the network address order
+
   struct sockaddr_in sa;
   int result = inet_pton(AF_INET, address, &(sa.sin_addr));
-  return result;
+  if (result < 1)
+  {
+    LOG(ERROR, "Address %s, is not correctly formated", address);
+    return -1;
+  }
 
   memset(&hints, 0, sizeof hints);
   hints.ai_family = AF_INET;       // type of ipv version
@@ -62,27 +68,56 @@ int connect_to_address(char *port, char *address)
     }
     break;
   }
-  LOG(DEBUG, "Connection established by this client: %d", socket_fd);
-  free(listips);
-  return (socket_fd);
+
+  // free first
+  freeaddrinfo(listips);
+
+  if (temp)
+  {
+    LOG(DEBUG, "Connection established by this client: %d", socket_fd);
+    return (socket_fd);
+  }
+  else
+  {
+    LOG(ERROR, "Failed to connect to the server");
+    exit(1);
+  }
 }
 
 int ftp_execute_command(int socket_fd, char **command_line_args)
 {
+  int status = 0;
   const char *command = command_line_args[0];
 
-  if (strcmp(command, "connect"))
+  if (strcmp(command, "connect") == 0)
   {
     char *address = command_line_args[1];
-    socket_fd = connect_to_address(address, PORT);
-    if (socket_fd == -1)
+    if (address)
     {
-      LOG(ERROR,
-          "There was an error establishing a connection to this address: %s",
-          address);
+      socket_fd = connect_to_address(address, PORT);
+      if (socket_fd == -1)
+      {
+        LOG(ERROR,
+            "There was an error establishing a connection to this address: %s",
+            address);
+      }
+      else
+      {
+        LOG(INFO, "Connection to the server has been established...");
+        // this will keep track of the connection
+        status = 1;
+      }
     }
-    LOG(INFO, "Connection to the server has been established...");
+    else
+    {
+      LOG(ERROR, "missing address argument <conect> <address>");
+    }
   }
+
+  // return the user a welcome message to ensure that all the connection was
+  // established well print the current working directory send recieve a file
+  // from the ftp server
+  //
 
   if (strcmp(command, "help") == 0)
   {
@@ -97,6 +132,10 @@ int ftp_execute_command(int socket_fd, char **command_line_args)
     close(socket_fd);
     return 1;
   }
+
+  // clear the screen
+  if (strcmp(command, "clear") == 0)
+    system("clear");
 
   return (0);
 }

@@ -1,4 +1,5 @@
 #include "ftp.h"
+#include <netinet/in.h>
 
 int send_file(int socket_fd, const char *file_path)
 {
@@ -66,7 +67,11 @@ int create_a_socket(char *port)
   hints.ai_socktype = SOCK_STREAM; // TCP
   hints.ai_flags = AI_PASSIVE;     // use own address
 
-  int status = getaddrinfo(NULL, "20", &hints, &servinfo);
+  // testing buffer to see the actual ip addresses
+  char buf[INET6_ADDRSTRLEN];
+  int attempts = 0;
+
+  int status = getaddrinfo(NULL, port, &hints, &servinfo);
 
   if (status != 0)
   {
@@ -92,14 +97,21 @@ int create_a_socket(char *port)
       close(socketfd);
       perror("Failed to bind to specifed address.");
       continue;
+      attempts++;
     }
 
     break;
     // if both of those functions complete successfully then
     // we successfully created the connection.
   }
+  // debbugging
+  struct sockaddr_in *IPv4 = (struct sockaddr_in *)p->ai_addr;
+  inet_ntop(p->ai_family, &(IPv4->sin_addr), buf, sizeof(buf));
+  LOG(INFO, "IPV4: %s:%s", buf, port);
 
+  /*you will need to display the ip address*/
   freeaddrinfo(servinfo);
+
   if (p == NULL)
   {
     fprintf(stderr, "server: failed to bind to port %s\n", port);
@@ -120,7 +132,7 @@ int main(int argc, char *argv[])
   socklen_t address_len;
 
   // make a connection to the suggested port
-  server_socket = create_a_socket("20");
+  server_socket = create_a_socket("1990");
   if (server_socket < 0)
   {
     LOG(ERROR, "Error setting up the socket to the specified port");
@@ -136,6 +148,7 @@ int main(int argc, char *argv[])
   }
 
   LOG(INFO, "Socket is listening...");
+
   while (1)
   {
     // accept the incoming connection
@@ -147,6 +160,13 @@ int main(int argc, char *argv[])
     {
       LOG(ERROR, "Accept error");
       continue;
+    }
+
+    if (client_socket)
+    {
+      // send back the client a confirmation message
+      // 220 : Connection established
+      LOG(INFO, "Client connection has been established");
     }
 
     // multiprocessing
@@ -164,10 +184,11 @@ int main(int argc, char *argv[])
         byte_reads = recv(client_socket, command, 20, 0);
         // basically has to hold the command
 
-        LOG(DEBUG, "Command type: %s", command);
-
         if (byte_reads > 0)
+        {
+          LOG(DEBUG, "Command type: %s", command);
           execute_commands(client_socket, command);
+        }
         // run the command
       }
     }
