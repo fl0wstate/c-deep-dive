@@ -16,7 +16,7 @@ char *ftp_banner =
     "\n            ░  ░   ░ ░     ░         ░               ░  ░         ░  ░ "
     "\n                                                                     ";
 
-int connect_to_address(char *address, char *port)
+int connect_to_server_address(char *address, char *port)
 {
   int socket_fd = -1, status = 0;
   //* filter for the type of address info we want IPV4 or IPV6 */
@@ -85,19 +85,20 @@ int connect_to_address(char *address, char *port)
   }
 }
 
-int ftp_execute_command(int socket_fd, char **command_line_args)
+int ftp_execute_command(char **command_line_args)
 {
   int status = 0, data_read = 0;
   const char *command = command_line_args[0];
-  int new_socket_connection = 0;
+  int new_client_socket_connection = 0;
 
   if (strcmp(command, "connect") == 0)
   {
     char *address = command_line_args[1];
     if (address)
     {
-      new_socket_connection = connect_to_address(address, PORT);
-      if (new_socket_connection == -1)
+      // this will generate the socket_fd that has a connection to the server
+      new_client_socket_connection = connect_to_server_address(address, PORT);
+      if (new_client_socket_connection == -1)
       {
         LOG(ERROR,
             "There was an error establishing a connection to this address: %s",
@@ -105,6 +106,8 @@ int ftp_execute_command(int socket_fd, char **command_line_args)
       }
       else
       {
+        // after making a succesful connection you will need your server to
+        // reply with a 220
         LOG(INFO, "Connection to the server has been established...");
         // this will keep track of the connection
         status = 1;
@@ -119,25 +122,9 @@ int ftp_execute_command(int socket_fd, char **command_line_args)
   // testing out
   if (strcmp(command, "PWD") == 0)
   {
-    // send the command over the socket_fd
-    int status = send(new_socket_connection, command, strlen(command), 0);
-
-    LOG(DEBUG, "%d ", status);
-
-    char response[BUFFSIZE];
-
-    if (status < 0)
-      LOG(ERROR, "Error: send(client_side)");
-    else
-      data_read = recv(socket_fd, response, BUFFSIZE, 0);
-
-    response[data_read] = '\0';
-    LOG(INFO, "RESPONSE: %s", response);
+    // after every successful command execution you will need to reply with a
+    // 226 code
   }
-  // return the user a welcome message to ensure that all the connection was
-  // established well print the current working directory send recieve a file
-  // from the ftp server
-  //
 
   if (strcmp(command, "help") == 0)
   {
@@ -148,8 +135,10 @@ int ftp_execute_command(int socket_fd, char **command_line_args)
   if (strcmp(command, "exit") == 0)
   {
     LOG(INFO, "Bye!");
+    // you will need to send a connection close data
+    // reply with 221 for a connection closed by the server
     // ensure the conneciton is closed
-    close(socket_fd);
+    close(new_client_socket_connection);
     return 1;
   }
 
@@ -254,7 +243,8 @@ void ftp_cli_parser()
   fprintf(stdout, "%s", ftp_banner);
   putchar('\n');
 
-  int socket_fd = 0;
+  // remove the socket_fd here and move it inside the ftp_execute_command
+  // int socket_fd = 0;
 
   while (1)
   {
@@ -281,7 +271,7 @@ void ftp_cli_parser()
     /*          command_line_args[i]);*/
 
     // testing out first
-    if (ftp_execute_command(socket_fd, command_line_args) == 1)
+    if (ftp_execute_command(command_line_args) == 1)
     {
       LOG(INFO, "Cleaning up...");
       free(command_line);
