@@ -2,6 +2,7 @@
 #include <netdb.h>
 #include <netinet/in.h>
 #include <stdio.h>
+#include <string.h>
 
 char *ftp_banner =
     "    ███████▓    ▒█████  █     █░ ██████▄▄▄█████▓▄▄▄    ▄▄▄█████▓█████  "
@@ -86,16 +87,17 @@ int connect_to_address(char *address, char *port)
 
 int ftp_execute_command(int socket_fd, char **command_line_args)
 {
-  int status = 0;
+  int status = 0, data_read = 0;
   const char *command = command_line_args[0];
+  int new_socket_connection = 0;
 
   if (strcmp(command, "connect") == 0)
   {
     char *address = command_line_args[1];
     if (address)
     {
-      socket_fd = connect_to_address(address, PORT);
-      if (socket_fd == -1)
+      new_socket_connection = connect_to_address(address, PORT);
+      if (new_socket_connection == -1)
       {
         LOG(ERROR,
             "There was an error establishing a connection to this address: %s",
@@ -114,6 +116,24 @@ int ftp_execute_command(int socket_fd, char **command_line_args)
     }
   }
 
+  // testing out
+  if (strcmp(command, "PWD") == 0)
+  {
+    // send the command over the socket_fd
+    int status = send(new_socket_connection, command, strlen(command), 0);
+
+    LOG(DEBUG, "%d ", status);
+
+    char response[BUFFSIZE];
+
+    if (status < 0)
+      LOG(ERROR, "Error: send(client_side)");
+    else
+      data_read = recv(socket_fd, response, BUFFSIZE, 0);
+
+    response[data_read] = '\0';
+    LOG(INFO, "RESPONSE: %s", response);
+  }
   // return the user a welcome message to ensure that all the connection was
   // established well print the current working directory send recieve a file
   // from the ftp server

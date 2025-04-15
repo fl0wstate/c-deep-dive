@@ -1,5 +1,6 @@
 #include "ftp.h"
 #include <netinet/in.h>
+#include <unistd.h>
 
 int send_file(int socket_fd, const char *file_path)
 {
@@ -29,6 +30,28 @@ int send_file(int socket_fd, const char *file_path)
 
 void execute_commands(int socket_fd, const char *command)
 {
+  // simple example of printing the current working directory
+  if (strcmp(command, "PWD") == 0)
+  {
+    char lcwd[BUFFSIZE];
+    int byte_reads = 0;
+    // handle the case of printing the current working directory
+    // take the result and save it to a buffer
+    if (!getcwd(lcwd, sizeof lcwd))
+      LOG(ERROR, "Error: getcwd isn't working as expected");
+
+    // send the buffer over the network, client socket_fd, data
+    byte_reads = send(socket_fd, lcwd, sizeof lcwd, 0);
+
+    if (byte_reads == -1)
+      LOG(ERROR, "Error: sending data of the current workind directory");
+
+    // some suggestion make a struct to send back the data with some other
+    // headers that will be used to hold other information about the data being
+    // sent
+  }
+
+  // this super wrong
   if (strcmp(command, "RETR") == 0)
   {
     char file_path[100];
