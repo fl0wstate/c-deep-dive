@@ -1,5 +1,8 @@
 #include "ftp.h"
 #include <netinet/in.h>
+#include <string.h>
+#include <sys/socket.h>
+#include <sys/types.h>
 #include <unistd.h>
 
 int send_file(int socket_fd, const char *file_path)
@@ -28,55 +31,16 @@ int send_file(int socket_fd, const char *file_path)
   return (0);
 }
 
-void execute_commands(int socket_fd, const char *command)
+void execute_commands(u_int8_t socket_fd, struct network_packet *client_data)
 {
-  // simple example of printing the current working directory
-  if (strcmp(command, "PWD") == 0)
+  switch (client_data->command_id)
   {
-    char lcwd[BUFFSIZE];
-    int byte_reads = 0;
-    // handle the case of printing the current working directory
-    // take the result and save it to a buffer
-    if (!getcwd(lcwd, sizeof lcwd))
-      LOG(ERROR, "Error: getcwd isn't working as expected");
-
-    // send the buffer over the network, client socket_fd, data
-    byte_reads = send(socket_fd, lcwd, sizeof lcwd, 0);
-
-    if (byte_reads == -1)
-      LOG(ERROR, "Error: sending data of the current workind directory");
-
-    // some suggestion make a struct to send back the data with some other
-    // headers that will be used to hold other information about the data being
-    // sent
-  }
-
-  // this super wrong
-  if (strcmp(command, "RETR") == 0)
-  {
-    char file_path[100];
-    int byte_reads = 0;
-
-    byte_reads = recv(socket_fd, file_path, 100, 0);
-
-    if (byte_reads > 0)
-    {
-      if (send_file(socket_fd, file_path) == -1)
-      {
-        LOG(ERROR, "You are cooked...");
-        // you are now kill the child process
-        exit(EXIT_FAILURE);
-      }
-    }
-    else
-    {
-      LOG(ERROR, "Error reading data from the connected file descriptor");
-      LOG(DEBUG, "You probably want to handle this correctly");
-    }
-  }
-  else
-  {
-    LOG(DEBUG, "Not yet implemented");
+  case PWD:
+    LOG(INFO, "You are supposed to print the current working directory");
+    break;
+  default:
+    LOG(ERROR, "No Such Command Implemented");
+    break;
   }
 }
 
@@ -145,16 +109,15 @@ int create_a_socket(char *port)
     return socketfd;
   }
 }
-// sending files over the instructed connection
-// reading the command passed down by the client
 
 int main(int argc, char *argv[])
 {
   int server_socket = 0, client_socket = 0, status = 0;
+  int client_connection_id = 0;
   struct sockaddr_storage client_address;
+  struct client_info *ci;
   socklen_t address_len;
 
-  // make a connection to the suggested port
   server_socket = create_a_socket("1990");
   if (server_socket < 0)
   {
@@ -174,7 +137,6 @@ int main(int argc, char *argv[])
 
   while (1)
   {
-    // accept the incoming connection
     address_len = sizeof client_address;
     client_socket =
         accept(server_socket, (struct sockaddr *)&client_address, &address_len);
@@ -187,36 +149,67 @@ int main(int argc, char *argv[])
 
     if (client_socket)
     {
-      // send back the client a confirmation message
-      // 220 : Connection established
+      // store the client_socket and the correct id for that specific connected
+      client_connection_id++;
+      // client send back the client a confirmation message 220 : Connection
+      // established
       LOG(INFO, "Client connection has been established");
+      ci = client_info_storage(client_socket, client_connection_id);
     }
 
     // multiprocessing
     if (!fork())
     {
       LOG(DEBUG, "You are in the child process...");
-      // you are in the child process
+
       close(server_socket);
 
       while (1)
       {
+        /*********************************************/
+        // create space for the network packet
         int byte_reads = 0;
-        char command[20] = {0};
-        // read the data from that file descriptor
-        byte_reads = recv(client_socket, command, 20, 0);
-        // basically has to hold the command
+        struct network_packet *client_data;
+        struct network_packet *data =
+            (struct network_packet *)malloc(sizeof(struct network_packet));
 
-        if (byte_reads > 0)
+        if (!data)
+          LOG(ERROR, "Something wrong with the data transfer");
+
+        // read the data being sent over the network (remember the protocal)
+        byte_reads =
+            recv(client_socket, data, sizeof(struct network_packet), 0);
+
+        if (byte_reads <= 0)
         {
-          LOG(DEBUG, "Command type: %s", command);
-          execute_commands(client_socket, command);
+          LOG(ERROR, "Read error");
+          break;
         }
-        // run the command
+
+        client_data = network_to_host_presentation(data);
+
+        // command type being sent is a Termination signal
+        if (client_data->command_type == TERM)
+          break;
+
+        if (client_data->connection_id == 0)
+          client_data->connection_id = ci->client_connection_id;
+
+        if (client_data->command_type == REQU)
+          execute_commands(ci->client_socket_id, client_data);
+        else
+        {
+          LOG(ERROR, "Error handling the packet...closing the connection");
+          terminate_connection(client_data, data, ci->client_socket_id);
+        }
+
+        free(data);
+        /*********************************************/
       }
     }
+    close(client_socket);
+    free(ci);
   }
-
   close(server_socket);
   printf("Hello World\n");
   return EXIT_SUCCESS;

@@ -15,6 +15,9 @@ char *ftp_banner =
     "\n ░ ░     ░ ░   ░ ░ ░ ▒    ░   ░   ░ ░      ░      ░░        ░ "
     "\n           ░  ░    ░ ░      ░                               ";
 
+// for monitaring the state of the PROMPT
+static int connected = 0;
+
 int connect_to_server_address(char *address, char *port)
 {
   int socket_fd = -1, status = 0;
@@ -109,7 +112,9 @@ int ftp_execute_command(char **command_line_args)
         // reply with a 220
         LOG(INFO, "Connection to the server has been established...");
         // this will keep track of the connection
-        status = 1;
+        connected = 1;
+        // now that the connection has been established i think you will need to
+        // run all the commands from here on
       }
     }
     else
@@ -119,10 +124,21 @@ int ftp_execute_command(char **command_line_args)
   }
 
   // testing out
-  if (strcmp(command, "PWD") == 0)
+  if (strcmp(command, "pwd") == 0)
   {
     // after every successful command execution you will need to reply with a
     // 226 code
+  }
+
+  if (strcmp(command, "test") == 0)
+  {
+    char buffer[BUFFSIZE];
+
+    int bytes = 0;
+
+    bytes = recv(new_client_socket_connection, buffer, BUFFSIZE, 0);
+
+    LOG(INFO, "%s", buffer);
   }
 
   if (strcmp(command, "help") == 0)
@@ -251,7 +267,18 @@ void ftp_cli_parser()
     char **command_line_args;
     int commands_len = 0;
 
-    fprintf(stdout, "ftp>> ");
+    // change the state of the function to make sure it indicates when the
+    // connection is established and when the connection is not established...
+
+    if (connected)
+    {
+      fprintf(stdout, ANSI_COLOR_YELLOW "ftp>.< " ANSI_RESET_ALL);
+    }
+    else
+    {
+      fprintf(stdout, "ftp>> ");
+    }
+
     fflush(stdout);
     command_line = ftp_getline(SMALL_BUFF, stdin);
     if (!command_line)

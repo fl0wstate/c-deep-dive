@@ -32,7 +32,6 @@ typedef enum LOG_LEVEL
 #define ANSI_COLOR_CYAN "\x1b[36m"
 #define ANSI_COLOR_WHITE "\x1b[37m"
 
-#define BUFFSIZE 1064
 #define SMALL_BUFF 100
 #define FTP_DELIMITERS " \t\r\n\a"
 #define FTP_TOKEN_BUFF 64
@@ -41,8 +40,53 @@ typedef enum LOG_LEVEL
 // FLAGS
 #define REOF 0
 
-extern int commands_len;
+// Packet representation
+#define BUFFSIZE 508
+struct network_packet
+{
+  u_int8_t command_type;
+  u_int8_t connection_id;
+  u_int8_t command_id;
+  u_int8_t command_len;
+  char command_buffer[BUFFSIZE];
+} __attribute__((packed));
+
+// info about the connected clients
+struct client_info
+{
+  u_int8_t client_socket_id;
+  u_int8_t client_connection_id;
+};
+
+// handling different form of ftp communication protocal
+enum TYPE
+{
+  REQU,
+  DONE,
+  INF,
+  TERM,
+  DATA,
+  EOT,
+};
+
 // LOGS
 void LOG(logll level, const char *format, ...);
 int create_a_socket(char *port);
+
+// utility functions
+struct client_info *client_info_storage(u_int8_t socket_fd,
+                                        u_int8_t connection_id);
+struct network_packet *
+host_to_network_presentation(struct network_packet *host_presentation);
+struct network_packet *
+network_to_host_presentation(struct network_packet *network_presentation);
+
+// void function that only return a signal to the client
+void terminate_connection(struct network_packet *return_packet,
+                          struct network_packet *recieved_packet,
+                          u_int8_t socket_fd);
+
+void end_of_transfer(struct network_packet *return_packet,
+                     struct network_packet *recieved_packet,
+                     u_int8_t socket_fd);
 #endif

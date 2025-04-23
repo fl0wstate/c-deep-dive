@@ -83,5 +83,6 @@ int main()
   }
 
   LOG(INFO, "End");
+  LOG(INFO, "size of uint8_t data type: %u", sizeof(uint8_t));
   return EXIT_SUCCESS;
 }
