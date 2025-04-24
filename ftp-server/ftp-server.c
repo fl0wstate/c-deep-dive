@@ -31,8 +31,7 @@ int send_file(int socket_fd, const char *file_path)
   return (0);
 }
 
-void execute_commands(u_int8_t socket_fd, struct network_packet *client_data,
-                      struct network_packet *data)
+void execute_commands(u_int8_t socket_fd, struct network_packet *client_data)
 {
   char listpwd[BUFFSIZE];
   int x = 0;
@@ -44,11 +43,12 @@ void execute_commands(u_int8_t socket_fd, struct network_packet *client_data,
       LOG(ERROR, "PWD not working well...");
     }
     client_data->command_type = DATA;
+    client_data->command_len = (u_int8_t)BUFFSIZE;
     strcpy(client_data->command_buffer, listpwd);
 
-    print_packet(client_data, 1);
+    print_packet(client_data);
 
-    host_to_network_presentation(client_data);
+    // host_to_network_presentation(client_data);
     if ((x = send(socket_fd, client_data, sizeof(struct network_packet), 0)) !=
         sizeof(struct network_packet))
       LOG(ERROR, "Sending Packets");
@@ -185,7 +185,6 @@ int main(int argc, char *argv[])
         /*********************************************/
         // create space for the network packet
         int byte_reads = 0;
-        struct network_packet *client_data;
         struct network_packet *data =
             (struct network_packet *)malloc(sizeof(struct network_packet));
 
@@ -204,7 +203,7 @@ int main(int argc, char *argv[])
 
         network_to_host_presentation(data);
 
-        print_packet(data, 1);
+        print_packet(data);
 
         // command type being sent is a Termination signal
         if (data->command_type == TERM)
@@ -216,12 +215,12 @@ int main(int argc, char *argv[])
         if (data->command_type == REQU)
         {
           LOG(INFO, "You sent a REQU command");
-          execute_commands(ci->client_socket_id, data, client_data);
+          execute_commands(ci->client_socket_id, data);
         }
         else
         {
           LOG(ERROR, "Error handling the packet...closing the connection");
-          terminate_connection(client_data, data, ci->client_socket_id);
+          // terminate_connection(data, data, ci->client_socket_id);
         }
 
         free(data);

@@ -143,25 +143,12 @@ int ftp_execute_command(char **command_line_args)
     client_data->connection_id = 0;
     client_data->command_len = 0; // No data in command_buffer for PWD
 
-    print_packet(client_data, 1);
-
     host_to_network_presentation(client_data);
 
-    print_packet(client_data, 0);
+    print_packet(client_data);
 
-    size_t total_sent = 0;
-    while (total_sent < sizeof(struct network_packet))
-    {
-      data_read = send(connected, (char *)client_data + total_sent,
-                       sizeof(struct network_packet) - total_sent, 0);
-      if (data_read < 0)
-      {
-        LOG(ERROR, "Send failed: %s", strerror(data_read));
-        free(client_data);
-        return -1;
-      }
-      total_sent += data_read;
-    }
+    // sending data
+    send_data(connected, client_data);
 
     // Receive into client_data
     size_t total_read = 0;
@@ -179,10 +166,7 @@ int ftp_execute_command(char **command_line_args)
       total_read += data_read;
     }
 
-    LOG(DEBUG, "total read %d", total_read);
     client_data->command_buffer[BUFFSIZE - 1] = '\0';
-    print_packet(client_data, 1);
-
     network_to_host_presentation(client_data); // Also in-place
 
     // print_packet(client_data, 1);
@@ -190,7 +174,7 @@ int ftp_execute_command(char **command_line_args)
     if (client_data->command_type == DATA && client_data->command_id == PWD &&
         strlen(client_data->command_buffer) > 0)
     {
-      LOG(INFO, "\t%s", client_data->command_buffer);
+      LOG(INFO, "[DATA]: %s", client_data->command_buffer);
     }
     else
     {

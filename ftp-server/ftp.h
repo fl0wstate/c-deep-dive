@@ -83,6 +83,7 @@ int create_a_socket(char *port);
 // utility functions
 struct client_info *client_info_storage(u_int8_t socket_fd,
                                         u_int8_t connection_id);
+// not sure what to do with them yet
 void host_to_network_presentation(struct network_packet *hp);
 void network_to_host_presentation(struct network_packet *np);
 
@@ -95,6 +96,11 @@ void end_of_transfer(struct network_packet *return_packet,
                      struct network_packet *recieved_packet,
                      u_int8_t socket_fd);
 
+// network packet handler
 void packet_initializer(struct network_packet *);
-void print_packet(struct network_packet *packet, u_int8_t);
+void print_packet(struct network_packet *packet);
+
+// data transfer
+int recv_data(int socket_fd, struct network_packet *client_data);
+int send_data(int socket_fd, struct network_packet *client_data);
 #endif

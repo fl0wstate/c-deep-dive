@@ -50,13 +50,8 @@ struct client_info *client_info_storage(u_int8_t socket_fd,
 }
 
 // printing packet
-void print_packet(struct network_packet *packet, u_int8_t packet_type)
+void print_packet(struct network_packet *packet)
 {
-  if (packet_type)
-    LOG(INFO, "HOST PACKET");
-  else
-    LOG(INFO, "NETWORK PACKET");
-
   LOG(DEBUG, "Connection id: \t%d", packet->connection_id);
   LOG(DEBUG, "Command id: \t%d", packet->command_id);
   LOG(DEBUG, "Command type: \t%d", packet->command_type);
@@ -92,4 +87,47 @@ void end_of_transfer(struct network_packet *return_packet,
 void packet_initializer(struct network_packet *packet)
 {
   memset(packet, 0, sizeof(struct network_packet));
+}
+
+int recv_data(int socket_fd, struct network_packet *client_data)
+{
+  size_t total_read = 0;
+  size_t data_read = 0;
+
+  while (total_read < size_packet)
+  {
+    data_read = recv(socket_fd, (char *)client_data + total_read,
+                     size_packet - total_read, 0);
+    if (data_read <= 0)
+    {
+      LOG(ERROR, "receiving failed %s",
+          data_read == 0 ? "Connection closed" : strerror(data_read));
+      free(client_data);
+      return -1;
+    }
+    total_read += data_read;
+  }
+  client_data->command_buffer[BUFFSIZE - 1] = '\0';
+  return 0;
+}
+
+int send_data(int socket_fd, struct network_packet *client_data)
+{
+  size_t total_send = 0;
+  size_t data_sent = 0;
+
+  while (total_send < size_packet)
+  {
+    data_sent = send(socket_fd, (char *)client_data + total_send,
+                     size_packet - total_send, 0);
+    if (data_sent <= 0)
+    {
+      LOG(ERROR, "sending failed %s",
+          data_sent == 0 ? "Connection closed" : strerror(data_sent));
+      free(client_data);
+      return -1;
+    }
+    total_send += data_sent;
+  }
+  return 0;
 }
