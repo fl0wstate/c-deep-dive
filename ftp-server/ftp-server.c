@@ -189,9 +189,8 @@ int main(int argc, char *argv[])
             (struct network_packet *)malloc(sizeof(struct network_packet));
 
         if (!data)
-          LOG(ERROR, "Something wrong with the data transfer");
+          LOG(ERROR, "Malloc failed");
 
-        // read the data being sent over the network (remember the protocal)
         byte_reads =
             recv(client_socket, data, sizeof(struct network_packet), 0);
 
@@ -209,6 +208,7 @@ int main(int argc, char *argv[])
         if (data->command_type == TERM)
           break;
 
+        // attach a unique connection id to the current connected client
         if (data->connection_id == 0)
           data->connection_id = ci->client_connection_id;
 
@@ -219,8 +219,10 @@ int main(int argc, char *argv[])
         }
         else
         {
+          // something happened that the server can't figure out yet sendinga
+          // termination signal
           LOG(ERROR, "Error handling the packet...closing the connection");
-          // terminate_connection(data, data, ci->client_socket_id);
+          terminate_connection(data, ci->client_socket_id);
         }
 
         free(data);

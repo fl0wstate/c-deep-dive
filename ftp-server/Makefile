@@ -8,6 +8,7 @@ ser = ./ftp-server.c ./log.c ./utils.c
 obj1 = $(cli:.c=.o)
 obj2 = $(cl:.c=.o)
 obj3 = $(ser:.c=.o)
+obj = obj1 obj3
 binary = bin
 
 all: $(binary)

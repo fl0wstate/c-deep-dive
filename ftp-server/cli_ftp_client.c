@@ -126,8 +126,6 @@ int ftp_execute_command(char **command_line_args)
     }
   }
 
-  LOG(DEBUG, "client fd -> %d", connected);
-
   // this commands will only run once the connection above is established
   if (strcmp(command, "PWD") == 0)
   {
@@ -151,22 +149,9 @@ int ftp_execute_command(char **command_line_args)
     send_data(connected, client_data);
 
     // Receive into client_data
-    size_t total_read = 0;
-    while (total_read < sizeof(struct network_packet))
-    {
-      data_read = recv(connected, (char *)client_data + total_read,
-                       sizeof(struct network_packet) - total_read, 0);
-      if (data_read <= 0)
-      {
-        LOG(ERROR, "Recv failed: %s",
-            data_read == 0 ? "Connection closed" : strerror(data_read));
-        free(client_data);
-        return -1;
-      }
-      total_read += data_read;
-    }
+    recv_data(connected, client_data);
 
-    client_data->command_buffer[BUFFSIZE - 1] = '\0';
+    // not needed will definetly check it out
     network_to_host_presentation(client_data); // Also in-place
 
     // print_packet(client_data, 1);
@@ -190,6 +175,7 @@ int ftp_execute_command(char **command_line_args)
 
   if (strcmp(command, "exit") == 0)
   {
+    // terminate_connection(client_data,connected);
     LOG(INFO, "Bye!");
     // you will need to send a connection close data
     // reply with 221 for a connection closed by the server

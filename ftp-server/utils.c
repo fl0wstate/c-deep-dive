@@ -15,8 +15,7 @@ void network_to_host_presentation(struct network_packet *np)
     LOG(ERROR, "Invalid command_len: %d", np->command_len);
     np->command_len = (u_int8_t)BUFFSIZE;
   }
-  // Ensure command_buffer is null-terminated
-  // np->command_buffer[np->command_len] = '\0';
+  // you can keep track of other details
 }
 
 // host to network_presentation for edianess check over the network(big edian)
@@ -60,15 +59,14 @@ void print_packet(struct network_packet *packet)
 }
 
 // handling termination of a commands
-void terminate_connection(struct network_packet *return_packet,
-                          struct network_packet *recieved_packet,
+void terminate_connection(struct network_packet *recieved_packet,
                           u_int8_t socket_fd)
 {
   int x;
   recieved_packet->command_type = TERM;
-  host_to_network_presentation(return_packet);
-  if ((x = send(socket_fd, return_packet, sizeof(struct network_packet), 0)) !=
-      sizeof(struct network_packet))
+  host_to_network_presentation(recieved_packet);
+  if ((x = send(socket_fd, recieved_packet, sizeof(struct network_packet),
+                0)) != sizeof(struct network_packet))
     LOG(ERROR, "Sending termination packet error");
 }
 

@@ -88,8 +88,7 @@ void host_to_network_presentation(struct network_packet *hp);
 void network_to_host_presentation(struct network_packet *np);
 
 // void function that only return a signal to the client
-void terminate_connection(struct network_packet *return_packet,
-                          struct network_packet *recieved_packet,
+void terminate_connection(struct network_packet *recieved_packet,
                           u_int8_t socket_fd);
 
 void end_of_transfer(struct network_packet *return_packet,
