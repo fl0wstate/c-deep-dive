@@ -31,12 +31,29 @@ int send_file(int socket_fd, const char *file_path)
   return (0);
 }
 
-void execute_commands(u_int8_t socket_fd, struct network_packet *client_data)
+void execute_commands(u_int8_t socket_fd, struct network_packet *client_data,
+                      struct network_packet *data)
 {
+  char listpwd[BUFFSIZE];
+  int x = 0;
   switch (client_data->command_id)
   {
   case PWD:
-    LOG(INFO, "You are supposed to print the current working directory");
+    if (!getcwd(listpwd, BUFFSIZE))
+    {
+      LOG(ERROR, "PWD not working well...");
+    }
+    client_data->command_type = DATA;
+    strcpy(client_data->command_buffer, listpwd);
+
+    print_packet(client_data, 1);
+
+    host_to_network_presentation(client_data);
+    if ((x = send(socket_fd, client_data, sizeof(struct network_packet), 0)) !=
+        sizeof(struct network_packet))
+      LOG(ERROR, "Sending Packets");
+
+    LOG(DEBUG, "You are supposed to print the current working directory");
     break;
   default:
     LOG(ERROR, "No Such Command Implemented");
@@ -144,12 +161,11 @@ int main(int argc, char *argv[])
     if (client_socket < 0)
     {
       LOG(ERROR, "Accept error");
-      continue;
+      break;
     }
 
     if (client_socket)
     {
-      // store the client_socket and the correct id for that specific connected
       client_connection_id++;
       // client send back the client a confirmation message 220 : Connection
       // established
@@ -186,17 +202,22 @@ int main(int argc, char *argv[])
           break;
         }
 
-        client_data = network_to_host_presentation(data);
+        network_to_host_presentation(data);
+
+        print_packet(data, 1);
 
         // command type being sent is a Termination signal
-        if (client_data->command_type == TERM)
+        if (data->command_type == TERM)
           break;
 
-        if (client_data->connection_id == 0)
-          client_data->connection_id = ci->client_connection_id;
+        if (data->connection_id == 0)
+          data->connection_id = ci->client_connection_id;
 
-        if (client_data->command_type == REQU)
-          execute_commands(ci->client_socket_id, client_data);
+        if (data->command_type == REQU)
+        {
+          LOG(INFO, "You sent a REQU command");
+          execute_commands(ci->client_socket_id, data, client_data);
+        }
         else
         {
           LOG(ERROR, "Error handling the packet...closing the connection");
@@ -207,8 +228,9 @@ int main(int argc, char *argv[])
         /*********************************************/
       }
     }
-    close(client_socket);
     free(ci);
+    close(client_socket);
+    // handle signal termination
   }
   close(server_socket);
   printf("Hello World\n");

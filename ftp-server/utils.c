@@ -3,57 +3,34 @@
 #include <string.h>
 #include <sys/types.h>
 
+static size_t size_packet = sizeof(struct network_packet);
 // newtork_presentation to host network presentation from big edian to small
 // edian
-struct network_packet *
-network_to_host_presentation(struct network_packet *network_presentation)
+void network_to_host_presentation(struct network_packet *np)
 {
-  // make a new host_presentation_packet
-  struct network_packet *host_presentation_packet =
-      (struct network_packet *)malloc(sizeof(struct network_packet));
-
-  // initalize it
-  memset(host_presentation_packet, 0, sizeof(struct network_packet));
-  // fill it with the network_presentation_packet
-  host_presentation_packet->command_id =
-      ntohs(network_presentation->command_id);
-  host_presentation_packet->command_type =
-      ntohs(network_presentation->command_type);
-  host_presentation_packet->command_len =
-      ntohs(network_presentation->command_len);
-  // return then host_presentation_packet
-
-  memcpy(host_presentation_packet->command_buffer,
-         network_presentation->command_buffer, BUFFSIZE);
-
-  return host_presentation_packet;
+  // No conversion needed for 8-bit fields (command_type, connection_id,
+  // command_id, command_len) Validate command_len for safety
+  if (np->command_len > (u_int8_t)BUFFSIZE)
+  {
+    LOG(ERROR, "Invalid command_len: %d", np->command_len);
+    np->command_len = (u_int8_t)BUFFSIZE;
+  }
+  // Ensure command_buffer is null-terminated
+  // np->command_buffer[np->command_len] = '\0';
 }
 
 // host to network_presentation for edianess check over the network(big edian)
-struct network_packet *
-host_to_network_presentation(struct network_packet *host_presentation)
+void host_to_network_presentation(struct network_packet *hp)
 {
-
-  // make a new network_presentation_packet
-  struct network_packet *network_presentation_packet =
-      (struct network_packet *)malloc(sizeof(struct network_packet));
-
-  // initalize it
-  memset(network_presentation_packet, 0, sizeof(struct network_packet));
-
-  // fill it with host_presentation_packet
-  network_presentation_packet->command_id =
-      ntohs(host_presentation->command_id);
-  network_presentation_packet->command_id =
-      ntohs(host_presentation->command_id);
-  network_presentation_packet->command_id =
-      ntohs(host_presentation->command_id);
-  network_presentation_packet->command_id =
-      ntohs(host_presentation->command_id);
-  memcpy(network_presentation_packet->command_buffer,
-         host_presentation->command_buffer, BUFFSIZE);
-
-  return network_presentation_packet;
+  // No conversion needed for 8-bit fields (command_type, connection_id,
+  // command_id, command_len) Validate command_len for safety
+  if (hp->command_len > (u_int8_t)BUFFSIZE)
+  {
+    LOG(ERROR, "Invalid command_len: %d", hp->command_len);
+    hp->command_len = (u_int8_t)BUFFSIZE;
+  }
+  // Ensure command_buffer is null-terminated
+  hp->command_buffer[hp->command_len] = '\0';
 }
 
 // handling the case on how to store the client information
@@ -94,9 +71,9 @@ void terminate_connection(struct network_packet *return_packet,
 {
   int x;
   recieved_packet->command_type = TERM;
-  recieved_packet = host_to_network_presentation(return_packet);
-  if ((x = send(socket_fd, recieved_packet, sizeof(struct network_packet),
-                0)) != sizeof(struct network_packet))
+  host_to_network_presentation(return_packet);
+  if ((x = send(socket_fd, return_packet, sizeof(struct network_packet), 0)) !=
+      sizeof(struct network_packet))
     LOG(ERROR, "Sending termination packet error");
 }
 
@@ -105,8 +82,14 @@ void end_of_transfer(struct network_packet *return_packet,
 {
   int x;
   recieved_packet->command_type = EOT;
-  recieved_packet = host_to_network_presentation(return_packet);
-  if ((x = send(socket_fd, recieved_packet, sizeof(struct network_packet),
-                0)) != sizeof(struct network_packet))
+  host_to_network_presentation(return_packet);
+  if ((x = send(socket_fd, return_packet, sizeof(struct network_packet), 0)) !=
+      sizeof(struct network_packet))
     LOG(ERROR, "Sending end of transfer packet error");
+}
+
+// intialize the network_packet on the client side
+void packet_initializer(struct network_packet *packet)
+{
+  memset(packet, 0, sizeof(struct network_packet));
 }

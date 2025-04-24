@@ -1,10 +1,10 @@
 # Simple make file for compiling specific source files
 # make a simple list in the make fi
 cc = clang
-flags = -Wall -Werror -pedantic -std=c99 -g
-cli = ./cli_ftp_client.c ./log.c
-cl = ./ftp-client.c ./log.c
-ser = ./ftp-server.c ./log.c
+flags = -Wall -Werror -pedantic -std=c89 -g
+cli = ./cli_ftp_client.c ./log.c ./utils.c
+cl = ./ftp-client.c ./log.c # don't forget to add the utils.c
+ser = ./ftp-server.c ./log.c ./utils.c
 obj1 = $(cli:.c=.o)
 obj2 = $(cl:.c=.o)
 obj3 = $(ser:.c=.o)

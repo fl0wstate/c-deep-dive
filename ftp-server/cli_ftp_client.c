@@ -89,9 +89,13 @@ int connect_to_server_address(char *address, char *port)
 
 int ftp_execute_command(char **command_line_args)
 {
+  struct network_packet *client_data =
+      (struct network_packet *)malloc(sizeof(struct network_packet));
+  // check for errors
+  packet_initializer(client_data);
+
   int status = 0, data_read = 0;
   const char *command = command_line_args[0];
-  int new_client_socket_connection = 0;
 
   if (strcmp(command, "connect") == 0)
   {
@@ -99,8 +103,8 @@ int ftp_execute_command(char **command_line_args)
     if (address)
     {
       // this will generate the socket_fd that has a connection to the server
-      new_client_socket_connection = connect_to_server_address(address, PORT);
-      if (new_client_socket_connection == -1)
+      connected = connect_to_server_address(address, PORT);
+      if (connected == -1)
       {
         LOG(ERROR,
             "There was an error establishing a connection to this address: %s",
@@ -112,7 +116,6 @@ int ftp_execute_command(char **command_line_args)
         // reply with a 220
         LOG(INFO, "Connection to the server has been established...");
         // this will keep track of the connection
-        connected = 1;
         // now that the connection has been established i think you will need to
         // run all the commands from here on
       }
@@ -123,22 +126,76 @@ int ftp_execute_command(char **command_line_args)
     }
   }
 
-  // testing out
-  if (strcmp(command, "pwd") == 0)
+  LOG(DEBUG, "client fd -> %d", connected);
+
+  // this commands will only run once the connection above is established
+  if (strcmp(command, "PWD") == 0)
   {
-    // after every successful command execution you will need to reply with a
-    // 226 code
-  }
+    if (!connected)
+    {
+      LOG(ERROR, "Not connected to a server. Use 'connect' first.");
+      free(client_data);
+      return -1;
+    }
 
-  if (strcmp(command, "test") == 0)
-  {
-    char buffer[BUFFSIZE];
+    client_data->command_type = REQU;
+    client_data->command_id = PWD;
+    client_data->connection_id = 0;
+    client_data->command_len = 0; // No data in command_buffer for PWD
 
-    int bytes = 0;
+    print_packet(client_data, 1);
 
-    bytes = recv(new_client_socket_connection, buffer, BUFFSIZE, 0);
+    host_to_network_presentation(client_data);
 
-    LOG(INFO, "%s", buffer);
+    print_packet(client_data, 0);
+
+    size_t total_sent = 0;
+    while (total_sent < sizeof(struct network_packet))
+    {
+      data_read = send(connected, (char *)client_data + total_sent,
+                       sizeof(struct network_packet) - total_sent, 0);
+      if (data_read < 0)
+      {
+        LOG(ERROR, "Send failed: %s", strerror(data_read));
+        free(client_data);
+        return -1;
+      }
+      total_sent += data_read;
+    }
+
+    // Receive into client_data
+    size_t total_read = 0;
+    while (total_read < sizeof(struct network_packet))
+    {
+      data_read = recv(connected, (char *)client_data + total_read,
+                       sizeof(struct network_packet) - total_read, 0);
+      if (data_read <= 0)
+      {
+        LOG(ERROR, "Recv failed: %s",
+            data_read == 0 ? "Connection closed" : strerror(data_read));
+        free(client_data);
+        return -1;
+      }
+      total_read += data_read;
+    }
+
+    LOG(DEBUG, "total read %d", total_read);
+    client_data->command_buffer[BUFFSIZE - 1] = '\0';
+    print_packet(client_data, 1);
+
+    network_to_host_presentation(client_data); // Also in-place
+
+    // print_packet(client_data, 1);
+
+    if (client_data->command_type == DATA && client_data->command_id == PWD &&
+        strlen(client_data->command_buffer) > 0)
+    {
+      LOG(INFO, "\t%s", client_data->command_buffer);
+    }
+    else
+    {
+      LOG(ERROR, "\tError receiving data information");
+    }
   }
 
   if (strcmp(command, "help") == 0)
@@ -153,7 +210,7 @@ int ftp_execute_command(char **command_line_args)
     // you will need to send a connection close data
     // reply with 221 for a connection closed by the server
     // ensure the conneciton is closed
-    close(new_client_socket_connection);
+    close(connected);
     return 1;
   }
 
@@ -161,6 +218,7 @@ int ftp_execute_command(char **command_line_args)
   if (strcmp(command, "clear") == 0)
     system("clear");
 
+  free(client_data);
   return (0);
 }
 

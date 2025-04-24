@@ -61,12 +61,19 @@ struct client_info
 // handling different form of ftp communication protocal
 enum TYPE
 {
-  REQU,
   DONE,
   INF,
+  REQU,
   TERM,
   DATA,
   EOT,
+};
+
+enum COMMANDS
+{
+  GET,
+  CD,
+  PWD,
 };
 
 // LOGS
@@ -76,10 +83,8 @@ int create_a_socket(char *port);
 // utility functions
 struct client_info *client_info_storage(u_int8_t socket_fd,
                                         u_int8_t connection_id);
-struct network_packet *
-host_to_network_presentation(struct network_packet *host_presentation);
-struct network_packet *
-network_to_host_presentation(struct network_packet *network_presentation);
+void host_to_network_presentation(struct network_packet *hp);
+void network_to_host_presentation(struct network_packet *np);
 
 // void function that only return a signal to the client
 void terminate_connection(struct network_packet *return_packet,
@@ -89,4 +94,7 @@ void terminate_connection(struct network_packet *return_packet,
 void end_of_transfer(struct network_packet *return_packet,
                      struct network_packet *recieved_packet,
                      u_int8_t socket_fd);
+
+void packet_initializer(struct network_packet *);
+void print_packet(struct network_packet *packet, u_int8_t);
 #endif
