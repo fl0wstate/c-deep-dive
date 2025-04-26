@@ -74,6 +74,7 @@ enum COMMANDS
   GET,
   CD,
   PWD,
+  LS,
 };
 
 // LOGS

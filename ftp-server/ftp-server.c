@@ -46,7 +46,7 @@ void execute_commands(u_int8_t socket_fd, struct network_packet *client_data)
     client_data->command_len = (u_int8_t)BUFFSIZE;
     strcpy(client_data->command_buffer, listpwd);
 
-    print_packet(client_data);
+    // irint_packet(client_data);
 
     // host_to_network_presentation(client_data);
     if ((x = send(socket_fd, client_data, sizeof(struct network_packet), 0)) !=
@@ -55,6 +55,10 @@ void execute_commands(u_int8_t socket_fd, struct network_packet *client_data)
 
     LOG(DEBUG, "You are supposed to print the current working directory");
     break;
+
+  case LS:
+    // fix your command over here...
+
   default:
     LOG(ERROR, "No Such Command Implemented");
     break;
@@ -202,7 +206,7 @@ int main(int argc, char *argv[])
 
         network_to_host_presentation(data);
 
-        print_packet(data);
+        // print_packet(data);
 
         // command type being sent is a Termination signal
         if (data->command_type == TERM)

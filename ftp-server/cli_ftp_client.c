@@ -91,7 +91,6 @@ int ftp_execute_command(char **command_line_args)
 {
   struct network_packet *client_data =
       (struct network_packet *)malloc(sizeof(struct network_packet));
-  // check for errors
   packet_initializer(client_data);
 
   int status = 0, data_read = 0;
@@ -126,7 +125,6 @@ int ftp_execute_command(char **command_line_args)
     }
   }
 
-  // this commands will only run once the connection above is established
   if (strcmp(command, "PWD") == 0)
   {
     if (!connected)
@@ -143,7 +141,7 @@ int ftp_execute_command(char **command_line_args)
 
     host_to_network_presentation(client_data);
 
-    print_packet(client_data);
+    // print_packet(client_data);
 
     // sending data
     send_data(connected, client_data);
@@ -153,8 +151,6 @@ int ftp_execute_command(char **command_line_args)
 
     // not needed will definetly check it out
     network_to_host_presentation(client_data); // Also in-place
-
-    // print_packet(client_data, 1);
 
     if (client_data->command_type == DATA && client_data->command_id == PWD &&
         strlen(client_data->command_buffer) > 0)
@@ -167,13 +163,13 @@ int ftp_execute_command(char **command_line_args)
     }
   }
 
-  if (strcmp(command, "help") == 0)
+  if (strcmp(command, "HELP") == 0)
   {
     const char *helpString = "Welcome to the help page!";
     fprintf(stdout, "%s\n", helpString);
   }
 
-  if (strcmp(command, "exit") == 0)
+  if (strcmp(command, "EXIT") == 0)
   {
     // terminate_connection(client_data,connected);
     LOG(INFO, "Bye!");
@@ -184,9 +180,52 @@ int ftp_execute_command(char **command_line_args)
     return 1;
   }
 
-  // clear the screen
-  if (strcmp(command, "clear") == 0)
+  if (strcmp(command, "CL") == 0)
     system("clear");
+
+  if (strcmp(command, "LS") == 0)
+  {
+    int status = 0;
+    client_data->command_type = REQU;
+    client_data->command_id = LS;
+    client_data->connection_id = 0;
+    client_data->command_len = 0;
+
+    host_to_network_presentation(client_data);
+
+    // send the data
+    if ((status = send(connected, client_data, sizeof(struct network_packet),
+                       0)) != sizeof(struct network_packet))
+      LOG(ERROR, "Error sending LS network packet");
+
+    while (client_data->command_type != EOT)
+    {
+      if (client_data->command_type == DATA && client_data->command_id == LS &&
+          strlen(client_data->command_buffer))
+      {
+        LOG(INFO, "%s", client_data->command_buffer);
+      }
+      // recv
+      if ((status = recv(connected, client_data, sizeof(struct network_packet),
+                         0)) == 0)
+      {
+        LOG(ERROR, "Error reading LS network data");
+        break;
+      }
+    }
+  }
+
+  if (strcmp(command, "CWD") == 0)
+  {
+  }
+
+  if (strcmp(command, "GET") == 0)
+  {
+  }
+
+  if (strcmp(command, "PUT") == 0)
+  {
+  }
 
   free(client_data);
   return (0);
@@ -314,17 +353,8 @@ void ftp_cli_parser()
       LOG(ERROR, "Parser Failed closing this interactive ftp shell");
       exit(EXIT_FAILURE);
     }
-    // fprintf(stdout, ANSI_COLOR_YELLOW "[OUT] %s" ANSI_RESET_ALL,
-    // command_line);
-
     command_line_args = ftp_commands(command_line, FTP_DELIMITERS);
-    // checking if the length is correct
 
-    /*for (int i = 0; command_line_args[i] != NULL; i++)*/
-    /*  fprintf(stdout, ANSI_COLOR_CYAN "[%s]\n" ANSI_RESET_ALL,*/
-    /*          command_line_args[i]);*/
-
-    // testing out first
     if (ftp_execute_command(command_line_args) == 1)
     {
       LOG(INFO, "Cleaning up...");
