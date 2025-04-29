@@ -92,9 +92,7 @@ void network_to_host_presentation(struct network_packet *np);
 void terminate_connection(struct network_packet *recieved_packet,
                           u_int8_t socket_fd);
 
-void end_of_transfer(struct network_packet *return_packet,
-                     struct network_packet *recieved_packet,
-                     u_int8_t socket_fd);
+void end_of_transfer(struct network_packet *return_packet, u_int8_t socket_fd);
 
 // network packet handler
 void packet_initializer(struct network_packet *);

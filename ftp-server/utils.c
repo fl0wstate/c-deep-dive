@@ -62,6 +62,7 @@ void print_packet(struct network_packet *packet)
 void terminate_connection(struct network_packet *recieved_packet,
                           u_int8_t socket_fd)
 {
+  LOG(INFO, "YOU ARE INSIDE THE TERMINATION FUNCTION...");
   int x;
   recieved_packet->command_type = TERM;
   host_to_network_presentation(recieved_packet);
@@ -70,11 +71,10 @@ void terminate_connection(struct network_packet *recieved_packet,
     LOG(ERROR, "Sending termination packet error");
 }
 
-void end_of_transfer(struct network_packet *return_packet,
-                     struct network_packet *recieved_packet, u_int8_t socket_fd)
+void end_of_transfer(struct network_packet *return_packet, u_int8_t socket_fd)
 {
   int x;
-  recieved_packet->command_type = EOT;
+  return_packet->command_type = EOT;
   host_to_network_presentation(return_packet);
   if ((x = send(socket_fd, return_packet, sizeof(struct network_packet), 0)) !=
       sizeof(struct network_packet))

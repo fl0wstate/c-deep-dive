@@ -1,4 +1,5 @@
 #include "ftp.h"
+#include <dirent.h>
 #include <netinet/in.h>
 #include <string.h>
 #include <sys/socket.h>
@@ -58,6 +59,44 @@ void execute_commands(u_int8_t socket_fd, struct network_packet *client_data)
 
   case LS:
     // fix your command over here...
+    struct dirent *directory_info;
+    DIR *pdir;
+
+    if (!getcwd(listpwd, BUFFSIZE))
+      LOG(ERROR, "Error reading the current working directory");
+
+    // fill the network_packet with relevant data
+    client_data->command_type = DATA;
+    client_data->command_len = (u_int8_t)BUFFSIZE;
+
+    if (!(pdir = opendir(listpwd)))
+      LOG(ERROR, "Unable to open the current working directory");
+
+    while ((directory_info = readdir(pdir)) != NULL)
+    {
+      snprintf(client_data->command_buffer, BUFFSIZE, "%s\t%s",
+               directory_info->d_type == 4   ? "DIR:"
+               : directory_info->d_type == 8 ? "FILE:"
+                                             : "UNDEF",
+               directory_info->d_name);
+
+      network_to_host_presentation(client_data);
+
+      if ((x = send(socket_fd, client_data, sizeof(struct network_packet),
+                    0)) != sizeof(struct network_packet))
+        LOG(ERROR, "Sending LS Packets");
+    }
+    end_of_transfer(client_data, socket_fd);
+    break; // this will prevent case overflow
+
+  case GET:
+    // read a file in binary format
+    handle_get_command();
+    // set up the information that is needed for the packet transfer
+    // make sure the data was read successfully
+    // if the file was opened make sure it is transfered
+    // when done send and EOT
+    break;
 
   default:
     LOG(ERROR, "No Such Command Implemented");
