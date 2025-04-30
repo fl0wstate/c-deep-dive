@@ -1,36 +1,11 @@
 #include "ftp.h"
 #include <dirent.h>
 #include <netinet/in.h>
+#include <stdio.h>
 #include <string.h>
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <unistd.h>
-
-int send_file(int socket_fd, const char *file_path)
-{
-  FILE *file;
-  int file_length = 0;
-
-  file = fopen(file_path, "r");
-
-  if (!file)
-  {
-    LOG(ERROR, "Error reading file");
-    return -1;
-  }
-
-  fseek(file, 0L, SEEK_END);
-  file_length = (int)ftell(file);
-  fseek(file, 0L, SEEK_SET);
-
-  char filedata[file_length + 1];
-  fread(filedata, sizeof(char), file_length, file);
-  send(socket_fd, filedata, file_length, 0);
-
-  fclose(file);
-  close(socket_fd);
-  return (0);
-}
 
 void execute_commands(u_int8_t socket_fd, struct network_packet *client_data)
 {
@@ -90,17 +65,46 @@ void execute_commands(u_int8_t socket_fd, struct network_packet *client_data)
     break; // this will prevent case overflow
 
   case GET:
-    // read a file in binary format
-    handle_get_command();
-    // set up the information that is needed for the packet transfer
-    // make sure the data was read successfully
-    // if the file was opened make sure it is transfered
-    // when done send and EOT
-    break;
+    FILE *fp = fopen(client_data->command_buffer, "rb");
+    client_data->command_type = INFO;
+    client_data->command_id = GET;
 
-  default:
-    LOG(ERROR, "No Such Command Implemented");
-    break;
+    sprintf(client_data->command_buffer,
+            fp ? "File found, ready for processing..."
+               : "Error opening the file...");
+    send_packet(client_data, socket_fd, "GET");
+
+    LOG(DEBUG, "Is the file ready %s", fp ? "TRUE" : "FALSE");
+    if (fp)
+    {
+      off_t fln = get_file_size(fp);
+      if (fln == -1)
+      {
+        LOG(ERROR, "Error reading file");
+        client_data->command_type = INFO;
+        sprintf(client_data->command_buffer, "Error reading file data");
+        send_packet(client_data, socket_fd, "GET");
+        fclose(fp);
+        break;
+      }
+
+      client_data->command_type = DATA;
+      x = 0;
+      while ((x = fread(client_data->command_buffer, 1, BUFFSIZE, fp)))
+      {
+        client_data->command_len = x;
+        // error handle the send_packet command
+        send_packet(client_data, socket_fd, "GET");
+        LOG(DEBUG, "this bytes were sent over the network... %d", x);
+      }
+      fclose(fp);
+      end_of_transfer(client_data, socket_fd);
+      break;
+
+    default:
+      LOG(ERROR, "No Such Command Implemented");
+      break;
+    }
   }
 }
 

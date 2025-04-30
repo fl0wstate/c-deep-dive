@@ -191,7 +191,7 @@ int ftp_execute_command(char **command_line_args)
     client_data->connection_id = 0;
     client_data->command_len = 0;
 
-    host_to_network_presentation(client_data);
+    // host_to_network_presentation(client_data);
 
     // send the data
     if ((status = send(connected, client_data, sizeof(struct network_packet),
@@ -221,6 +221,37 @@ int ftp_execute_command(char **command_line_args)
 
   if (strcmp(command, "GET") == 0)
   {
+    FILE *fp = fopen(command_line_args[1], "wb");
+    if (!fp)
+      LOG(ERROR, "Error opening file....");
+
+    client_data->command_type = REQU;
+    client_data->command_id = GET;
+    client_data->command_len = 0;
+
+    strcpy(client_data->command_buffer, command_line_args[1]);
+    send_packet(client_data, connected, "GET");
+    recv_data(connected, client_data);
+
+    if (client_data->command_type == INFO && client_data->command_id == GET &&
+        strlen(client_data->command_buffer))
+    {
+      LOG(INFO, "%s", client_data->command_buffer);
+
+      // more than one recv means you are sending data back in chuncks
+      recv_data(connected, client_data);
+      while (client_data->command_type == DATA)
+      {
+        if (fwrite(client_data->command_buffer, 1, client_data->command_len,
+                   fp) != client_data->command_len)
+        {
+          LOG(ERROR, "Error writing to file...");
+          break;
+        }
+        recv_data(connected, client_data);
+      }
+      fclose(fp);
+    }
   }
 
   if (strcmp(command, "PUT") == 0)

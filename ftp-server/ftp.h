@@ -9,6 +9,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/socket.h>
+#include <sys/stat.h>
 #include <sys/types.h>
 #include <time.h>
 #include <unistd.h>
@@ -101,4 +102,9 @@ void print_packet(struct network_packet *packet);
 // data transfer
 int recv_data(int socket_fd, struct network_packet *client_data);
 int send_data(int socket_fd, struct network_packet *client_data);
+
+void send_packet(struct network_packet *client_data, u_int8_t socket_fd,
+                 char *command);
+
+off_t get_file_size(FILE *fp);
 #endif

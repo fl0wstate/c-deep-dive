@@ -1,6 +1,7 @@
 #include "ftp.h"
 #include <netinet/in.h>
 #include <string.h>
+#include <sys/stat.h>
 #include <sys/types.h>
 
 static size_t size_packet = sizeof(struct network_packet);
@@ -96,11 +97,13 @@ int recv_data(int socket_fd, struct network_packet *client_data)
   {
     data_read = recv(socket_fd, (char *)client_data + total_read,
                      size_packet - total_read, 0);
+
     if (data_read <= 0)
     {
       LOG(ERROR, "receiving failed %s",
           data_read == 0 ? "Connection closed" : strerror(data_read));
-      free(client_data);
+      // at the end of the file the client_data- will be freed
+      // free(client_data);
       return -1;
     }
     total_read += data_read;
@@ -128,4 +131,27 @@ int send_data(int socket_fd, struct network_packet *client_data)
     total_send += data_sent;
   }
   return 0;
+}
+
+void send_packet(struct network_packet *client_data, u_int8_t socket_fd,
+                 char *command)
+{
+  int x = 0;
+  if ((x = send(socket_fd, client_data, sizeof(struct network_packet), 0)) !=
+      sizeof(struct network_packet))
+  {
+    LOG(ERROR, "Sending %s Packets", command);
+  }
+}
+
+// gets the file size
+off_t get_file_size(FILE *fp)
+{
+  struct stat st;
+
+  if (fstat(fileno(fp), &st) == 0)
+    return st.st_size;
+
+  LOG(ERROR, "Error reading file");
+  return -1;
 }
