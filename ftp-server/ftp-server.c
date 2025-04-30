@@ -22,8 +22,6 @@ void execute_commands(u_int8_t socket_fd, struct network_packet *client_data)
     client_data->command_len = (u_int8_t)BUFFSIZE;
     strcpy(client_data->command_buffer, listpwd);
 
-    // irint_packet(client_data);
-
     // host_to_network_presentation(client_data);
     if ((x = send(socket_fd, client_data, sizeof(struct network_packet), 0)) !=
         sizeof(struct network_packet))
@@ -75,6 +73,7 @@ void execute_commands(u_int8_t socket_fd, struct network_packet *client_data)
     send_packet(client_data, socket_fd, "GET");
 
     LOG(DEBUG, "Is the file ready %s", fp ? "TRUE" : "FALSE");
+
     if (fp)
     {
       off_t fln = get_file_size(fp);
@@ -99,6 +98,32 @@ void execute_commands(u_int8_t socket_fd, struct network_packet *client_data)
       }
       fclose(fp);
       end_of_transfer(client_data, socket_fd);
+      break;
+
+    case PUT:
+      FILE *fp = fopen(client_data->command_buffer, "wb");
+
+      client_data->command_type = INFO;
+      client_data->command_id = PUT;
+
+      sprintf(client_data->command_buffer,
+              fp ? "File created successfully, ready to recieve data..."
+                 : "Error creating the file...");
+      send_packet(client_data, socket_fd, "PUT");
+
+      // receiving data to store to file from the client side...
+      recv_data(socket_fd, client_data);
+      while (client_data->command_type == DATA)
+      {
+        if ((fwrite(client_data->command_buffer, 1, client_data->command_len,
+                    fp) != client_data->command_len))
+        {
+          LOG(ERROR, "Error writing to file...");
+          break;
+        }
+        recv_data(socket_fd, client_data);
+      }
+      fclose(fp);
       break;
 
     default:

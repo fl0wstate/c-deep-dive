@@ -1,4 +1,5 @@
 #include "ftp.h"
+#include <complex.h>
 #include <netdb.h>
 #include <netinet/in.h>
 #include <stdio.h>
@@ -256,6 +257,40 @@ int ftp_execute_command(char **command_line_args)
 
   if (strcmp(command, "PUT") == 0)
   {
+    size_t x = 0;
+    FILE *fp = fopen(command_line_args[1], "rb");
+
+    if (!fp)
+      LOG(ERROR, "Error opening local file...");
+
+    client_data->command_type = REQU;
+    client_data->command_id = PUT;
+    client_data->command_len = 0;
+
+    strcpy(client_data->command_buffer, command_line_args[1]);
+    send_packet(client_data, connected, "PUT");
+
+    recv_data(connected, client_data);
+    if (client_data->command_type == INFO && client_data->command_id == PUT &&
+        strlen(client_data->command_buffer))
+    {
+      LOG(INFO, "%s", client_data->command_buffer);
+
+      // the read logic
+      size_t total_read = 0;
+      while ((x = fread(client_data->command_buffer, 1, BUFFSIZE, fp)))
+      {
+        client_data->command_len = x;
+        client_data->command_type = DATA;
+        // error handle the send_packet command
+        send_packet(client_data, connected, "PUT");
+        total_read += x;
+      }
+      LOG(DEBUG, "Size of the file: %d", get_file_size(fp));
+      LOG(DEBUG, "Size of data transfered: %zu", total_read);
+      fclose(fp);
+      end_of_transfer(client_data, connected);
+    }
   }
 
   free(client_data);

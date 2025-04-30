@@ -76,6 +76,7 @@ enum COMMANDS
   CD,
   PWD,
   LS,
+  PUT,
 };
 
 // LOGS
