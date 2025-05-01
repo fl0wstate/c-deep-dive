@@ -166,8 +166,39 @@ int ftp_execute_command(char **command_line_args)
 
   if (strcmp(command, "HELP") == 0)
   {
-    const char *helpString = "Welcome to the help page!";
-    fprintf(stdout, "%s\n", helpString);
+    const char *helpString1 = "Welcome to the help page!";
+    fprintf(stdout, "%s\n", helpString1);
+    char *helpString;
+
+    helpString =
+        "Usage client [Address]."
+        "\nCOMMANDS:"
+        "\n\t quit \t\t\t- Disconnect from the server and exit the client."
+        "\n\t connect (address) \t- Connect to a FTP server specifed at the "
+        "given addres. "
+        "\n\t pwd \t\t\t- Print the current working directory on the server. "
+        "\n\t cd (path) \t\t- Change the directory on the server to the "
+        "specified path. "
+        "\n\t ls \t\t\t- List the contents of the working directory on the "
+        "server. "
+        "\n\t retrieve (file) [path]\t- Recieve a file that is hosted on the "
+        "server. "
+        "\n\t\t\t\t The first argument is file you want to recieve, "
+        "\n\t\t\t\t and the second argument is an option to specify "
+        "\n\t\t\t\t where the file should be saved to. "
+        "\n\t space \t\t\t- Get the disk space available on the server. "
+        "\n\t get (file) [path]\t- Get(download) file from the remote server "
+        "to your local machine"
+        "\n\t put (file) [path]\t- Get(upload) file from the locally "
+        "to the remote server"
+        "\n\t mkdir \t\t\t- Create a directory on the server."
+        "\n\t undo \t\t\t- Undo the last command."
+        "\n\t close \t\t\t- to terminate a connection with another computer."
+        "\n\t rename (path) (new)\t- Rename the specifed file. "
+        "\n\t rm (path) (new)\t- Delete the specifed file. "
+        "\n\t help \t\t\t- displays this help message ";
+
+    printf("%s\n", helpString);
   }
 
   if (strcmp(command, "EXIT") == 0)
@@ -214,10 +245,6 @@ int ftp_execute_command(char **command_line_args)
         break;
       }
     }
-  }
-
-  if (strcmp(command, "CWD") == 0)
-  {
   }
 
   if (strcmp(command, "GET") == 0)
@@ -293,6 +320,42 @@ int ftp_execute_command(char **command_line_args)
     }
   }
 
+  if (strcmp(command, "CLOSE") == 0)
+  {
+  }
+
+  if (strcmp(command, "CD") == 0)
+  {
+    client_data->command_type = REQU;
+    client_data->command_id = CD;
+    client_data->connection_id = 0;
+    client_data->command_len = 0; // No data in command_buffer for PWD
+
+    host_to_network_presentation(client_data);
+
+    strcpy(client_data->command_buffer, command_line_args[1]);
+    send_packet(client_data, connected, "CD");
+
+    recv_data(connected, client_data);
+
+    if (client_data->command_type == INFO && client_data->command_id == CD &&
+        !strcmp(client_data->command_buffer, "command success"))
+      ;
+    else
+      LOG(ERROR, "Error recieving data from the server..");
+  }
+
+  if (strcmp(command, "MKDIR") == 0)
+  {
+  }
+
+  if (strcmp(command, "RM") == 0)
+  {
+  }
+
+  if (strcmp(command, "") == 0)
+  {
+  }
   free(client_data);
   return (0);
 }

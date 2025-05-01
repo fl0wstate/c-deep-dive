@@ -126,6 +126,30 @@ void execute_commands(u_int8_t socket_fd, struct network_packet *client_data)
       fclose(fp);
       break;
 
+    case CD:
+      client_data->command_type = INFO;
+      client_data->command_id = CD;
+
+      if (strcmp(client_data->command_buffer, "~") == 0)
+      {
+        char *home = getenv("HOME");
+        strcpy(client_data->command_buffer, home);
+      }
+
+      if (strcmp(client_data->command_buffer, "-") == 0)
+      {
+        char *home = getenv("OLDPWD");
+        strcpy(client_data->command_buffer, home);
+      }
+
+      if ((x = chdir(client_data->command_buffer)) == -1)
+      {
+        LOG(ERROR, "Incorrect path provided...");
+        break;
+      }
+      sprintf(client_data->command_buffer, "command success");
+      send_packet(client_data, socket_fd, "CD");
+
     default:
       LOG(ERROR, "No Such Command Implemented");
       break;
