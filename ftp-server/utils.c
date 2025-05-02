@@ -5,35 +5,25 @@
 #include <sys/types.h>
 
 static size_t size_packet = sizeof(struct network_packet);
-// newtork_presentation to host network presentation from big edian to small
-// edian
 void network_to_host_presentation(struct network_packet *np)
 {
-  // No conversion needed for 8-bit fields (command_type, connection_id,
-  // command_id, command_len) Validate command_len for safety
   if (np->command_len > (u_int8_t)BUFFSIZE)
   {
     LOG(ERROR, "Invalid command_len: %d", np->command_len);
     np->command_len = (u_int8_t)BUFFSIZE;
   }
-  // you can keep track of other details
 }
 
-// host to network_presentation for edianess check over the network(big edian)
 void host_to_network_presentation(struct network_packet *hp)
 {
-  // No conversion needed for 8-bit fields (command_type, connection_id,
-  // command_id, command_len) Validate command_len for safety
   if (hp->command_len > (u_int8_t)BUFFSIZE)
   {
     LOG(ERROR, "Invalid command_len: %d", hp->command_len);
     hp->command_len = (u_int8_t)BUFFSIZE;
   }
-  // Ensure command_buffer is null-terminated
   hp->command_buffer[hp->command_len] = '\0';
 }
 
-// handling the case on how to store the client information
 struct client_info *client_info_storage(u_int8_t socket_fd,
                                         u_int8_t connection_id)
 {
@@ -49,7 +39,6 @@ struct client_info *client_info_storage(u_int8_t socket_fd,
   return client_global_information;
 }
 
-// printing packet
 void print_packet(struct network_packet *packet)
 {
   LOG(DEBUG, "Connection id: \t%d", packet->connection_id);
@@ -59,12 +48,11 @@ void print_packet(struct network_packet *packet)
   LOG(DEBUG, "Command buffer: \t%s", packet->command_buffer);
 }
 
-// handling termination of a commands
 void terminate_connection(struct network_packet *recieved_packet,
                           u_int8_t socket_fd)
 {
-  LOG(INFO, "YOU ARE INSIDE THE TERMINATION FUNCTION...");
   int x;
+  LOG(INFO, "YOU ARE INSIDE THE TERMINATION FUNCTION...");
   recieved_packet->command_type = TERM;
   host_to_network_presentation(recieved_packet);
   if ((x = send(socket_fd, recieved_packet, sizeof(struct network_packet),
@@ -82,7 +70,6 @@ void end_of_transfer(struct network_packet *return_packet, u_int8_t socket_fd)
     LOG(ERROR, "Sending end of transfer packet error");
 }
 
-// intialize the network_packet on the client side
 void packet_initializer(struct network_packet *packet)
 {
   memset(packet, 0, sizeof(struct network_packet));
@@ -102,8 +89,6 @@ int recv_data(int socket_fd, struct network_packet *client_data)
     {
       LOG(ERROR, "receiving failed %s",
           data_read == 0 ? "Connection closed" : strerror(data_read));
-      // at the end of the file the client_data- will be freed
-      // free(client_data);
       return -1;
     }
     total_read += data_read;
@@ -144,7 +129,6 @@ void send_packet(struct network_packet *client_data, u_int8_t socket_fd,
   }
 }
 
-// gets the file size
 off_t get_file_size(FILE *fp)
 {
   struct stat st;

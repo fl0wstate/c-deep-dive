@@ -1,6 +1,8 @@
 #ifndef __FTP_H_H__
 #define __FTP_H_H__
 
+#define _XOPEN_SOURCE 600
+
 #include <arpa/inet.h>
 #include <fcntl.h>
 #include <netdb.h>
@@ -16,13 +18,13 @@
 
 typedef enum LOG_LEVEL
 {
-  INFO,
   PROMPT,
+  INFO,
   DEBUG,
-  ERROR,
+  ERROR
 } logll;
 
-// ANSI_COLORS
+/* ANSI_COLORS */
 #define ANSI_RESET_ALL "\x1b[0m"
 #define ANSI_COLOR_BLACK "\x1b[30m"
 #define ANSI_COLOR_RED "\x1b[31m"
@@ -38,10 +40,10 @@ typedef enum LOG_LEVEL
 #define FTP_TOKEN_BUFF 64
 
 #define PORT "1990"
-// FLAGS
+/*FLAGS */
 #define REOF 0
 
-// Packet representation
+/* Packet representation */
 #define BUFFSIZE 508
 struct network_packet
 {
@@ -52,14 +54,14 @@ struct network_packet
   char command_buffer[BUFFSIZE];
 } __attribute__((packed));
 
-// info about the connected clients
+/* info about the connected clients */
 struct client_info
 {
   u_int8_t client_socket_id;
   u_int8_t client_connection_id;
 };
 
-// handling different form of ftp communication protocal
+/* handling different form of ftp communication protocal */
 enum TYPE
 {
   DONE,
@@ -67,7 +69,7 @@ enum TYPE
   REQU,
   TERM,
   DATA,
-  EOT,
+  EOT
 };
 
 enum COMMANDS
@@ -77,36 +79,33 @@ enum COMMANDS
   PWD,
   LS,
   PUT,
-  RM,
+  RM
 };
 
-// LOGS
+/* LOGS */
 void LOG(logll level, const char *format, ...);
 int create_a_socket(char *port);
 
-// utility functions
+/* utility functions */
 struct client_info *client_info_storage(u_int8_t socket_fd,
                                         u_int8_t connection_id);
-// not sure what to do with them yet
+/* not sure what to do with them yet */
 void host_to_network_presentation(struct network_packet *hp);
 void network_to_host_presentation(struct network_packet *np);
 
-// void function that only return a signal to the client
+/* network packet handler */
+void packet_initializer(struct network_packet *);
+void print_packet(struct network_packet *packet);
+void end_of_transfer(struct network_packet *return_packet, u_int8_t socket_fd);
 void terminate_connection(struct network_packet *recieved_packet,
                           u_int8_t socket_fd);
 
-void end_of_transfer(struct network_packet *return_packet, u_int8_t socket_fd);
-
-// network packet handler
-void packet_initializer(struct network_packet *);
-void print_packet(struct network_packet *packet);
-
-// data transfer
+/* data transfer */
 int recv_data(int socket_fd, struct network_packet *client_data);
 int send_data(int socket_fd, struct network_packet *client_data);
-
 void send_packet(struct network_packet *client_data, u_int8_t socket_fd,
                  char *command);
 
+/* file info */
 off_t get_file_size(FILE *fp);
 #endif

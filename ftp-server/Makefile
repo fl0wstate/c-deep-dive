@@ -1,6 +1,6 @@
 # Simple make file for compiling specific source files
 # make a simple list in the make fi
-cc = clang
+cc = gcc
 flags = -Wall -Werror -pedantic -std=c89 -g
 cli = ./cli_ftp_client.c ./log.c ./utils.c
 cl = ./ftp-client.c ./log.c # don't forget to add the utils.c
@@ -8,8 +8,7 @@ ser = ./ftp-server.c ./log.c ./utils.c
 obj1 = $(cli:.c=.o)
 obj2 = $(cl:.c=.o)
 obj3 = $(ser:.c=.o)
-obj = obj1 obj3
-binary = bin
+binary = server cli
 
 all: $(binary)
 
@@ -25,8 +24,11 @@ cli: $(obj1) ftp.h
 	$(cc) $(flags) $(obj1) -o $@
 
 
-$(binary): $(obj) ftp.h
-	$(cc) $(flags) $(obj) -o $@
+%.o: *%.c ftp.h
+	$(cc) $(flags) -c $< -o $@
+
+#$(binary): $(obj) ftp.h
+	# $(cc) $(flags) $(obj) -o $@
 
 
 clean:
