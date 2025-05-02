@@ -149,6 +149,22 @@ void execute_commands(u_int8_t socket_fd, struct network_packet *client_data)
       }
       sprintf(client_data->command_buffer, "command success");
       send_packet(client_data, socket_fd, "CD");
+      break;
+
+    case RM:
+      client_data->command_type = INFO;
+      client_data->command_id = RM;
+
+      LOG(DEBUG, "%s", client_data->command_buffer);
+
+      if (remove(client_data->command_buffer) != 0)
+      {
+        LOG(ERROR, "Failed to remove the file...(should not happen)");
+        break;
+      }
+      sprintf(client_data->command_buffer, "command success");
+      send_packet(client_data, socket_fd, "RM");
+      break;
 
     default:
       LOG(ERROR, "No Such Command Implemented");

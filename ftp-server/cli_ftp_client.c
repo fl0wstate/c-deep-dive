@@ -351,6 +351,30 @@ int ftp_execute_command(char **command_line_args)
 
   if (strcmp(command, "RM") == 0)
   {
+    client_data->command_type = REQU;
+    client_data->command_id = RM;
+    client_data->connection_id = 0;
+    client_data->command_len = 0; // No data in command_buffer for PWD
+
+    if (!command_line_args[1])
+    {
+      LOG(ERROR, "filename missing: RM <filename>");
+      return -1;
+    }
+
+    strcpy(client_data->command_buffer, command_line_args[1]);
+    // host_to_network_presentation(client_data);
+    // fix ^^^
+
+    send_packet(client_data, connected, "RM");
+
+    recv_data(connected, client_data);
+
+    if (client_data->command_type == INFO && client_data->command_id == RM &&
+        !strcmp(client_data->command_buffer, "command success"))
+      ;
+    else
+      LOG(ERROR, "Error recieving data from the server..");
   }
 
   if (strcmp(command, "") == 0)
