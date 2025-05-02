@@ -12,19 +12,19 @@
 
 void execute_commands(u_int8_t socket_fd, struct network_packet *client_data)
 {
-  char listpwd[BUFFSIZE];
+  char temp_buffer[BUFFSIZE];
   int x = 0;
   switch (client_data->command_id)
   {
   case PWD:
   {
-    if (!getcwd(listpwd, BUFFSIZE))
+    if (!getcwd(temp_buffer, BUFFSIZE))
     {
       LOG(ERROR, "PWD not working well...");
     }
     client_data->command_type = DATA;
     client_data->command_len = (u_int8_t)BUFFSIZE;
-    strcpy(client_data->command_buffer, listpwd);
+    strcpy(client_data->command_buffer, temp_buffer);
 
     if ((x = send(socket_fd, client_data, sizeof(struct network_packet), 0)) !=
         sizeof(struct network_packet))
@@ -39,14 +39,14 @@ void execute_commands(u_int8_t socket_fd, struct network_packet *client_data)
     struct dirent *directory_info;
     DIR *pdir;
 
-    if (!getcwd(listpwd, BUFFSIZE))
+    if (!getcwd(temp_buffer, BUFFSIZE))
       LOG(ERROR, "Error reading the current working directory");
 
     /* fill the network_packet with relevant data */
     client_data->command_type = DATA;
     client_data->command_len = (u_int8_t)BUFFSIZE;
 
-    if (!(pdir = opendir(listpwd)))
+    if (!(pdir = opendir(temp_buffer)))
       LOG(ERROR, "Unable to open the current working directory");
 
     while ((directory_info = readdir(pdir)) != NULL)
@@ -56,8 +56,6 @@ void execute_commands(u_int8_t socket_fd, struct network_packet *client_data)
               : directory_info->d_type == 8 ? "FILE:"
                                             : "UNDEF",
               directory_info->d_name);
-
-      network_to_host_presentation(client_data);
 
       if ((x = send(socket_fd, client_data, sizeof(struct network_packet),
                     0)) != sizeof(struct network_packet))
@@ -136,6 +134,39 @@ void execute_commands(u_int8_t socket_fd, struct network_packet *client_data)
     break;
   }
 
+  case MKDIR:
+  {
+    struct stat st = {0};
+    DIR *pdir = opendir(client_data->command_buffer);
+    LOG(DEBUG, "%s", client_data->command_buffer);
+
+    if (stat(client_data->command_buffer, &st) == -1)
+    {
+      /* mkdir(client_data->command_buffer, S_IRWXU | S_IRWXG | S_IROTH |
+       * S_IXOTH); */
+      mkdir(client_data->command_buffer, 0777);
+      strcpy(temp_buffer, "success");
+    }
+    else if (stat(client_data->command_buffer, &st) == 0)
+    {
+      strcpy(client_data->command_buffer, "Directory already exists");
+      closedir(pdir);
+    }
+    else
+    {
+      LOG(ERROR, "Could not create directory, invalid path!");
+      strcpy(temp_buffer, "fail");
+    }
+
+    client_data->command_type = INF;
+
+    strcpy(client_data->command_buffer, temp_buffer);
+
+    send_packet(client_data, socket_fd, "MKDIR");
+
+    break;
+  }
+
   case CD:
   {
     client_data->command_type = INF;
@@ -165,15 +196,21 @@ void execute_commands(u_int8_t socket_fd, struct network_packet *client_data)
 
   case RM:
   {
+    struct stat st = {0};
     client_data->command_type = INF;
     client_data->command_id = RM;
 
-    if (remove(client_data->command_buffer) != 0)
+    if (stat(client_data->command_buffer, &st) == 0)
     {
-      LOG(ERROR, "Failed to remove the file...(should not happen)");
-      break;
+      remove(client_data->command_buffer);
+      sprintf(client_data->command_buffer, "command success");
     }
-    sprintf(client_data->command_buffer, "command success");
+    else
+    {
+      LOG(ERROR, "Failed to remove %s, file does not exist",
+          client_data->command_buffer);
+      sprintf(client_data->command_buffer, "failed");
+    }
     send_packet(client_data, socket_fd, "RM");
     break;
   }
@@ -324,8 +361,6 @@ int main(int argc, char *argv[])
           break;
         }
 
-        network_to_host_presentation(data);
-
         /* print_packet(data); */
 
         /* command type being sent is a Termination signal */
@@ -343,8 +378,6 @@ int main(int argc, char *argv[])
         }
         else
         {
-          /* something happened that the server can't figure out yet sendinga */
-          /* termination signal */
           LOG(ERROR, "Error handling the packet...closing the connection");
           terminate_connection(data, ci->client_socket_id);
         }

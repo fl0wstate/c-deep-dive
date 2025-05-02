@@ -94,6 +94,10 @@ int ftp_execute_command(char **command_line_args)
       (struct network_packet *)malloc(sizeof(struct network_packet));
   packet_initializer(client_data);
 
+  client_data->command_type = REQU;
+  client_data->connection_id = 0;
+  client_data->command_len = 0;
+
   if (strcmp(command, "connect") == 0)
   {
     char *address = command_line_args[1];
@@ -133,21 +137,11 @@ int ftp_execute_command(char **command_line_args)
       return -1;
     }
 
-    client_data->command_type = REQU;
     client_data->command_id = PWD;
-    client_data->connection_id = 0;
-    client_data->command_len = 0;
 
-    host_to_network_presentation(client_data);
-
-    /* sending data */
     send_data(connected, client_data);
 
-    /* Receive into client_data */
     recv_data(connected, client_data);
-
-    /* not needed will definetly check it out */
-    network_to_host_presentation(client_data);
 
     if (client_data->command_type == DATA && client_data->command_id == PWD &&
         strlen(client_data->command_buffer) > 0)
@@ -221,14 +215,8 @@ int ftp_execute_command(char **command_line_args)
   if (strcmp(command, "LS") == 0)
   {
     int status = 0;
-    client_data->command_type = REQU;
     client_data->command_id = LS;
-    client_data->connection_id = 0;
-    client_data->command_len = 0;
 
-    /* host_to_network_presentation(client_data); */
-
-    /* send the data */
     if ((status = send(connected, client_data, sizeof(struct network_packet),
                        0)) != sizeof(struct network_packet))
       LOG(ERROR, "Error sending LS network packet");
@@ -256,9 +244,7 @@ int ftp_execute_command(char **command_line_args)
     if (!fp)
       LOG(ERROR, "Error opening file....");
 
-    client_data->command_type = REQU;
     client_data->command_id = GET;
-    client_data->command_len = 0;
 
     strcpy(client_data->command_buffer, command_line_args[1]);
     send_packet(client_data, connected, "GET");
@@ -294,14 +280,14 @@ int ftp_execute_command(char **command_line_args)
     if (!fp)
       LOG(ERROR, "Error opening local file...");
 
-    client_data->command_type = REQU;
     client_data->command_id = PUT;
-    client_data->command_len = 0;
 
     strcpy(client_data->command_buffer, command_line_args[1]);
+
     send_packet(client_data, connected, "PUT");
 
     recv_data(connected, client_data);
+
     if (client_data->command_type == INF && client_data->command_id == PUT &&
         strlen(client_data->command_buffer))
     {
@@ -316,8 +302,10 @@ int ftp_execute_command(char **command_line_args)
         send_packet(client_data, connected, "PUT");
         total_read += x;
       }
+
       LOG(DEBUG, "Size of the file: %d", get_file_size(fp));
       LOG(DEBUG, "Size of data transfered: %zu", total_read);
+
       fclose(fp);
       end_of_transfer(client_data, connected);
     }
@@ -329,14 +317,10 @@ int ftp_execute_command(char **command_line_args)
 
   if (strcmp(command, "CD") == 0)
   {
-    client_data->command_type = REQU;
     client_data->command_id = CD;
-    client_data->connection_id = 0;
-    client_data->command_len = 0;
-
-    host_to_network_presentation(client_data);
 
     strcpy(client_data->command_buffer, command_line_args[1]);
+
     send_packet(client_data, connected, "CD");
 
     recv_data(connected, client_data);
@@ -350,14 +334,33 @@ int ftp_execute_command(char **command_line_args)
 
   if (strcmp(command, "MKDIR") == 0)
   {
+    client_data->command_id = MKDIR;
+
+    strcpy(client_data->command_buffer, command_line_args[1]);
+
+    send_packet(client_data, connected, "MKDIR");
+
+    recv_data(connected, client_data);
+
+    if (client_data->command_type == INF && client_data->command_id == MKDIR)
+    {
+      if (!strcmp(client_data->command_buffer, "success"))
+        LOG(INFO, "Directory created successfully");
+
+      if (!strcmp(client_data->command_buffer, "fail"))
+        LOG(ERROR, "Directory creation failed");
+
+      LOG(INFO, "%s", client_data->command_buffer);
+    }
+    else
+    {
+      LOG(ERROR, "Error reaciving full network_packet for MKDIR command");
+    }
   }
 
   if (strcmp(command, "RM") == 0)
   {
-    client_data->command_type = REQU;
     client_data->command_id = RM;
-    client_data->connection_id = 0;
-    client_data->command_len = 0;
 
     if (!command_line_args[1])
     {
@@ -367,15 +370,21 @@ int ftp_execute_command(char **command_line_args)
 
     strcpy(client_data->command_buffer, command_line_args[1]);
 
-    print_packet(client_data);
+    /* print_packet(client_data); */
 
     send_packet(client_data, connected, "RM");
 
     recv_data(connected, client_data);
 
-    if (client_data->command_type == INF && client_data->command_id == RM &&
-        !strcmp(client_data->command_buffer, "command success"))
-      ;
+    if (client_data->command_type == INF && client_data->command_id == RM)
+    {
+      if (!strcmp(client_data->command_buffer, "success"))
+        LOG(INFO, "File removed");
+
+      if (!strcmp(client_data->command_buffer, "failed"))
+        LOG(ERROR, "cannot remove %s: No such file or directory",
+            command_line_args[1]);
+    }
     else
       LOG(ERROR, "Error recieving data from the server..");
   }

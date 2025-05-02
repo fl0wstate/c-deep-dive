@@ -5,25 +5,6 @@
 #include <sys/types.h>
 
 static size_t size_packet = sizeof(struct network_packet);
-void network_to_host_presentation(struct network_packet *np)
-{
-  if (np->command_len > (u_int8_t)BUFFSIZE)
-  {
-    LOG(ERROR, "Invalid command_len: %d", np->command_len);
-    np->command_len = (u_int8_t)BUFFSIZE;
-  }
-}
-
-void host_to_network_presentation(struct network_packet *hp)
-{
-  if (hp->command_len > (u_int8_t)BUFFSIZE)
-  {
-    LOG(ERROR, "Invalid command_len: %d", hp->command_len);
-    hp->command_len = (u_int8_t)BUFFSIZE;
-  }
-  hp->command_buffer[hp->command_len] = '\0';
-}
-
 struct client_info *client_info_storage(u_int8_t socket_fd,
                                         u_int8_t connection_id)
 {
@@ -54,7 +35,6 @@ void terminate_connection(struct network_packet *recieved_packet,
   int x;
   LOG(INFO, "YOU ARE INSIDE THE TERMINATION FUNCTION...");
   recieved_packet->command_type = TERM;
-  host_to_network_presentation(recieved_packet);
   if ((x = send(socket_fd, recieved_packet, sizeof(struct network_packet),
                 0)) != sizeof(struct network_packet))
     LOG(ERROR, "Sending termination packet error");
@@ -64,7 +44,6 @@ void end_of_transfer(struct network_packet *return_packet, u_int8_t socket_fd)
 {
   int x;
   return_packet->command_type = EOT;
-  host_to_network_presentation(return_packet);
   if ((x = send(socket_fd, return_packet, sizeof(struct network_packet), 0)) !=
       sizeof(struct network_packet))
     LOG(ERROR, "Sending end of transfer packet error");

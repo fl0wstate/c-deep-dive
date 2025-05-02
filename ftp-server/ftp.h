@@ -79,6 +79,7 @@ enum COMMANDS
   PWD,
   LS,
   PUT,
+  MKDIR,
   RM
 };
 
@@ -89,9 +90,6 @@ int create_a_socket(char *port);
 /* utility functions */
 struct client_info *client_info_storage(u_int8_t socket_fd,
                                         u_int8_t connection_id);
-/* not sure what to do with them yet */
-void host_to_network_presentation(struct network_packet *hp);
-void network_to_host_presentation(struct network_packet *np);
 
 /* network packet handler */
 void packet_initializer(struct network_packet *);
