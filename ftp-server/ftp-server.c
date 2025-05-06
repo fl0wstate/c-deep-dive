@@ -406,7 +406,6 @@ int main(int argc, char *argv[])
     }
 
     pthread_detach(thread);
-    LOG(INFO, "Waiting for new client...");
   }
 
   close(client_socket);

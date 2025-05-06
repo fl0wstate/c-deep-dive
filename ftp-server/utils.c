@@ -25,14 +25,15 @@ void print_packet(struct network_packet *packet)
   LOG(DEBUG, "Command buffer: \t%s", packet->command_buffer);
 }
 
+/*TODO: indicate either client or server sent a termination command */
 void terminate_connection(struct network_packet *recieved_packet,
                           u_int8_t socket_fd)
 {
   int x;
   LOG(INFO, "YOU ARE INSIDE THE TERMINATION FUNCTION...");
   recieved_packet->command_type = TERM;
-
   /* indicate who sent the termination signal */
+
   if ((x = send(socket_fd, recieved_packet, sizeof(struct network_packet),
                 0)) != sizeof(struct network_packet))
     LOG(ERROR, "Sending termination packet error");
