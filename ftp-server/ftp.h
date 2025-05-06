@@ -4,8 +4,13 @@
 #define _XOPEN_SOURCE 600
 
 #include <arpa/inet.h>
+#include <dirent.h>
+#include <errno.h>
 #include <fcntl.h>
 #include <netdb.h>
+#include <netinet/in.h>
+#include <pthread.h>
+#include <signal.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -74,6 +79,7 @@ enum TYPE
 
 enum COMMANDS
 {
+  CONNECT,
   GET,
   CD,
   PWD,
@@ -106,4 +112,8 @@ void send_packet(struct network_packet *client_data, u_int8_t socket_fd,
 
 /* file info */
 off_t get_file_size(FILE *fp);
+
+/* multithreading*/
+void *client_thread(void *args);
+
 #endif

@@ -1,14 +1,13 @@
 #include "ftp.h"
-#include <arpa/inet.h>
-#include <dirent.h>
-#include <fcntl.h>
-#include <netdb.h>
-#include <netinet/in.h>
-#include <stdio.h>
-#include <string.h>
-#include <sys/socket.h>
-#include <sys/types.h>
-#include <unistd.h>
+#include <pthread.h>
+
+static volatile u_int8_t keep_running = 1;
+
+void signal_handler(int sig)
+{
+  (void)sig;
+  keep_running = 0;
+}
 
 void execute_commands(u_int8_t socket_fd, struct network_packet *client_data)
 {
@@ -221,6 +220,59 @@ void execute_commands(u_int8_t socket_fd, struct network_packet *client_data)
   }
 }
 
+/* Re-emplementing it all with multithreading...*/
+void *client_thread(void *args)
+{
+  struct client_info *ci = (struct client_info *)args;
+  struct network_packet *data = malloc(sizeof(struct network_packet));
+
+  if (!data)
+  {
+    LOG(ERROR, "FATAL!  Malloc failed");
+    return NULL;
+  }
+
+  data->command_id = CONNECT;
+  data->command_type = INFO;
+  sprintf(data->command_buffer, "220 Welcome to flowftp!...");
+
+  send_packet(data, ci->client_socket_id, "INITIAL");
+
+  while (keep_running)
+  {
+    if (recv_data(ci->client_socket_id, data) < 0)
+    {
+      terminate_connection(data, ci->client_socket_id);
+      break;
+    }
+
+    if (data->command_type == TERM)
+    {
+      terminate_connection(data, ci->client_socket_id);
+      free(data);
+      break;
+    }
+
+    /* attach a unique connection id to the current connected client */
+    if (data->connection_id == 0)
+      data->connection_id = ci->client_connection_id;
+
+    if (data->command_type == REQU)
+    {
+      LOG(INFO, "You sent a REQU command");
+      execute_commands(ci->client_socket_id, data);
+    }
+    else
+    {
+      LOG(ERROR, "Error handling the packet...closing the connection");
+      terminate_connection(data, ci->client_socket_id);
+    }
+  }
+
+  return NULL;
+}
+/* end */
+
 int create_a_socket(char *port)
 {
   struct addrinfo hints;
@@ -303,6 +355,10 @@ int main(int argc, char *argv[])
   struct sockaddr_storage client_address;
   struct client_info *ci;
   socklen_t address_len;
+  pthread_t thread;
+
+  signal(SIGINT, signal_handler);
+  signal(SIGTERM, signal_handler);
 
   server_socket = create_a_socket("1990");
   if (server_socket < 0)
@@ -321,7 +377,7 @@ int main(int argc, char *argv[])
 
   LOG(INFO, "Socket is listening...");
 
-  while (1)
+  while (keep_running)
   {
     address_len = sizeof client_address;
     client_socket =
@@ -340,69 +396,22 @@ int main(int argc, char *argv[])
       ci = client_info_storage(client_socket, client_connection_id);
     }
 
-    /* multiprocessing */
-    if (!fork())
+    if (pthread_create(&thread, NULL, client_thread, (void *)ci) != 0)
     {
-      LOG(DEBUG, "You are in the child process...");
-
-      close(server_socket);
-
-      while (1)
-      {
-        /* create space for the network packet */
-        int byte_reads = 0;
-        struct network_packet *data =
-            (struct network_packet *)malloc(sizeof(struct network_packet));
-
-        if (!data)
-        {
-          LOG(ERROR, "Malloc failed, server is shutting down...");
-          exit(EXIT_FAILURE);
-        }
-
-        byte_reads =
-            recv(client_socket, data, sizeof(struct network_packet), 0);
-
-        if (byte_reads <= 0)
-        {
-          LOG(ERROR, "Read error.");
-          LOG(ERROR, "Client connection closed unexpectadely...");
-          break;
-        }
-
-        /* print_packet(data); */
-
-        /* command type being sent is a Termination signal */
-        if (data->command_type == TERM)
-        {
-          terminate_connection(data, client_socket);
-          free(data);
-          break;
-        }
-
-        /* attach a unique connection id to the current connected client */
-        if (data->connection_id == 0)
-          data->connection_id = ci->client_connection_id;
-
-        if (data->command_type == REQU)
-        {
-          LOG(INFO, "You sent a REQU command");
-          execute_commands(ci->client_socket_id, data);
-        }
-        else
-        {
-          LOG(ERROR, "Error handling the packet...closing the connection");
-          terminate_connection(data, ci->client_socket_id);
-        }
-
-        free(data);
-      }
+      LOG(ERROR, "Failed to create thread for client %d: %s",
+          client_connection_id, strerror(errno));
+      close(client_socket);
+      free(ci);
+      continue;
     }
-    free(ci);
-    close(client_socket);
-    /* handle signal termination */
+
+    pthread_detach(thread);
+    LOG(INFO, "Waiting for new client...");
   }
+
+  close(client_socket);
+  free(ci);
   close(server_socket);
-  printf("Server World\n");
+  printf("I hope i served you well...World\n");
   return EXIT_SUCCESS;
 }

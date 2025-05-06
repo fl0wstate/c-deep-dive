@@ -7,6 +7,65 @@
 #include <string.h>
 #include <sys/types.h>
 
+#ifdef PROC
+/* multiprocessing */
+if (!fork())
+{
+  LOG(DEBUG, "You are in the child process...");
+
+  close(server_socket);
+
+  while (1)
+  {
+    /* create space for the network packet */
+    int byte_reads = 0;
+    struct network_packet *data =
+        (struct network_packet *)malloc(sizeof(struct network_packet));
+
+    if (!data)
+    {
+      LOG(ERROR, "Malloc failed, server is shutting down...");
+      exit(EXIT_FAILURE);
+    }
+
+    byte_reads = recv(client_socket, data, sizeof(struct network_packet), 0);
+
+    if (byte_reads <= 0)
+    {
+      LOG(ERROR, "Read error.");
+      LOG(ERROR, "Client connection closed unexpectadely...");
+      break;
+    }
+
+    /* print_packet(data); */
+
+    /* command type being sent is a Termination signal */
+    if (data->command_type == TERM)
+    {
+      terminate_connection(data, client_socket);
+      free(data);
+      break;
+    }
+
+    /* attach a unique connection id to the current connected client */
+    if (data->connection_id == 0)
+      data->connection_id = ci->client_connection_id;
+
+    if (data->command_type == REQU)
+    {
+      LOG(INFO, "You sent a REQU command");
+      execute_commands(ci->client_socket_id, data);
+    }
+    else
+    {
+      LOG(ERROR, "Error handling the packet...closing the connection");
+      terminate_connection(data, ci->client_socket_id);
+    }
+
+    free(data);
+  }
+}
+#endif
 /* char *ftp_banner = */
 /*     "\n  █████▒██▓     ▒█████   █     █░  █████▒▄▄▄█████▓ ██▓███     " */
 /*     "\n▓██   ▒▓██▒    ▒██▒  ██▒▓█░ █ ░█░▓██   ▒ ▓  ██▒ ▓▒▓██░  ██▒   " */
@@ -113,13 +172,20 @@ int ftp_execute_command(char **command_line_args)
       }
       else
       {
-        /* after making a succesful connection you will need your server to */
-        /* reply with a 220 */
         LOG(INFO, "Connection to the server has been established...");
-        /* this will keep track of the connection */
-        /* now that the connection has been established i think you will need to
-         */
-        /* run all the commands from here on */
+
+        recv_data(connected, client_data);
+
+        if (client_data->command_type == INFO &&
+            client_data->command_id == CONNECT &&
+            strlen(client_data->command_buffer) > 0)
+        {
+          LOG(INFO, "%s", client_data->command_buffer);
+        }
+        else
+        {
+          LOG(ERROR, "\tError receiving data information");
+        }
       }
     }
     else
@@ -194,6 +260,7 @@ int ftp_execute_command(char **command_line_args)
     /*     "\n\t rename (path) (new)\t- Rename the specifed file. " */
     /*     "\n\t rm (path) (new)\t- Delete the specifed file. " */
     /*     "\n\t help \t\t\t- displays this help message "; */
+
     /**/
     /* printf("%s\n", helpString); */
   }

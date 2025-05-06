@@ -13,19 +13,19 @@ binary = server cli
 all: $(binary)
 
 server: $(obj3) ftp.h
-	$(cc) $(flags) $(obj3) -o $@
+	$(cc) $(flags) $(obj3) -lpthread -o $@
 
 
 client: $(obj2) ftp.h
-	$(cc) $(flags) $(obj2) -o $@
+	$(cc) $(flags) $(obj2) -lpthread -o $@
 
 
 cli: $(obj1) ftp.h
-	$(cc) $(flags) $(obj1) -o $@
+	$(cc) $(flags) $(obj1) -lpthread -o $@
 
 
 %.o: *%.c ftp.h
-	$(cc) $(flags) -c $< -o $@
+	$(cc) $(flags) -lpthread -c $< -o $@
 
 #$(binary): $(obj) ftp.h
 	# $(cc) $(flags) $(obj) -o $@

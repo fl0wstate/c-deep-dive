@@ -1,8 +1,4 @@
 #include "ftp.h"
-#include <netinet/in.h>
-#include <string.h>
-#include <sys/stat.h>
-#include <sys/types.h>
 
 static size_t size_packet = sizeof(struct network_packet);
 struct client_info *client_info_storage(u_int8_t socket_fd,
@@ -35,6 +31,8 @@ void terminate_connection(struct network_packet *recieved_packet,
   int x;
   LOG(INFO, "YOU ARE INSIDE THE TERMINATION FUNCTION...");
   recieved_packet->command_type = TERM;
+
+  /* indicate who sent the termination signal */
   if ((x = send(socket_fd, recieved_packet, sizeof(struct network_packet),
                 0)) != sizeof(struct network_packet))
     LOG(ERROR, "Sending termination packet error");
