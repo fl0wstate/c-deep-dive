@@ -229,12 +229,22 @@ int create_a_socket(char *port)
   /* char buf[INET6_ADDRSTRLEN]; */
   int attempts = 0, status = 0;
 
+  /**
+   * thinking in the context of what actually makes up an socket:
+   *  - transport protocol (TPC, UDP)
+   *  - Internet protocal (IPV4, IPV6)
+   *  - Port Number -> uniquely tells the computer which port to use during
+   communication
+   *
+   * with this hints provided we only need this type of socket that have the
+   same setup
+   * passing a NULL value of the node so that we can get a suitable socket for
+   binging()
+   */
   memset(&hints, 0, sizeof(hints));
   hints.ai_family = AF_INET;
   hints.ai_socktype = SOCK_STREAM;
   hints.ai_flags = AI_PASSIVE;
-
-  /* testing buffer to see the actual ip addresses */
 
   status = getaddrinfo(NULL, port, &hints, &servinfo);
 
@@ -252,7 +262,7 @@ int create_a_socket(char *port)
 
     if (socketfd == -1)
     {
-      perror("createConnection");
+      LOG(ERROR, "Error creating a server socket: %s", strerror(socketfd));
       continue;
     }
 
@@ -260,32 +270,30 @@ int create_a_socket(char *port)
     if (bind(socketfd, p->ai_addr, p->ai_addrlen) == -1)
     {
       close(socketfd);
-      perror("Failed to bind to specifed address.");
+      LOG(ERROR, "Failed to bind the specified address: %s", p->ai_addr);
       continue;
       attempts++;
     }
-
     break;
-    /* if both of those functions complete successfully then */
-    /* we successfully created the connection. */
+    /* finally found a better socket for the server to listen and accept for the
+     * incomming request*/
   }
+
   /* debbugging */
   /* struct sockaddr_in *IPv4 = (struct sockaddr_in *)p->ai_addr; */
   /* inet_ntop(p->ai_family, &(IPv4->sin_addr), buf, sizeof(buf)); */
   /* LOG(INFO, "IPV4: %s:%s", buf, port); */
 
-  /*you will need to display the ip address*/
   freeaddrinfo(servinfo);
 
   if (p == NULL)
   {
-    fprintf(stderr, "server: failed to bind to port %s\n", port);
-    exit(1);
-  }
-  else
-  {
+    LOG(ERROR, "Failed to create an Internet address to use...");
+    socketfd = -1;
     return socketfd;
   }
+
+  return socketfd;
 }
 
 int main(int argc, char *argv[])
@@ -328,8 +336,6 @@ int main(int argc, char *argv[])
     if (client_socket)
     {
       client_connection_id++;
-      /* client send back the client a confirmation message 220 : Connection */
-      /* established */
       LOG(INFO, "Client connection has been established");
       ci = client_info_storage(client_socket, client_connection_id);
     }
@@ -343,21 +349,24 @@ int main(int argc, char *argv[])
 
       while (1)
       {
-        /*********************************************/
         /* create space for the network packet */
         int byte_reads = 0;
         struct network_packet *data =
             (struct network_packet *)malloc(sizeof(struct network_packet));
 
         if (!data)
-          LOG(ERROR, "Malloc failed");
+        {
+          LOG(ERROR, "Malloc failed, server is shutting down...");
+          exit(EXIT_FAILURE);
+        }
 
         byte_reads =
             recv(client_socket, data, sizeof(struct network_packet), 0);
 
         if (byte_reads <= 0)
         {
-          LOG(ERROR, "Read error");
+          LOG(ERROR, "Read error.");
+          LOG(ERROR, "Client connection closed unexpectadely...");
           break;
         }
 
@@ -365,7 +374,11 @@ int main(int argc, char *argv[])
 
         /* command type being sent is a Termination signal */
         if (data->command_type == TERM)
+        {
+          terminate_connection(data, client_socket);
+          free(data);
           break;
+        }
 
         /* attach a unique connection id to the current connected client */
         if (data->connection_id == 0)
@@ -383,7 +396,6 @@ int main(int argc, char *argv[])
         }
 
         free(data);
-        /*********************************************/
       }
     }
     free(ci);
@@ -391,6 +403,6 @@ int main(int argc, char *argv[])
     /* handle signal termination */
   }
   close(server_socket);
-  printf("Hello World\n");
+  printf("Server World\n");
   return EXIT_SUCCESS;
 }

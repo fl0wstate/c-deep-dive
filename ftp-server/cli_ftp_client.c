@@ -200,12 +200,13 @@ int ftp_execute_command(char **command_line_args)
 
   if (strcmp(command, "EXIT") == 0)
   {
-    /* terminate_connection(client_data,connected); */
+    terminate_connection(client_data, connected);
     LOG(INFO, "Bye!");
     /* you will need to send a connection close data */
     /* reply with 221 for a connection closed by the server */
     /* ensure the conneciton is closed */
     close(connected);
+    free(client_data);
     return 1;
   }
 
