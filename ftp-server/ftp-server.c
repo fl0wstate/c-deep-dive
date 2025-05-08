@@ -64,12 +64,14 @@ void execute_commands(u_int8_t socket_fd, struct network_packet *client_data)
     break;
   }
 
+    /*TODO: Error Opening the file error */
   case GET:
   {
     FILE *fpr = fopen(client_data->command_buffer, "rb");
     client_data->command_type = INF;
     client_data->command_id = GET;
 
+    LOG(DEBUG, "FILE: %s", client_data->command_buffer);
     sprintf(client_data->command_buffer,
             fpr ? "File found, ready for processing..."
                 : "Error opening the file...");
@@ -186,6 +188,8 @@ void execute_commands(u_int8_t socket_fd, struct network_packet *client_data)
     if ((x = chdir(client_data->command_buffer)) == -1)
     {
       LOG(ERROR, "Incorrect path provided...");
+      sprintf(client_data->command_buffer, "Incorrect path provided");
+      send_packet(client_data, socket_fd, "CD");
       break;
     }
     sprintf(client_data->command_buffer, "command success");

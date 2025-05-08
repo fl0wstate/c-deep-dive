@@ -397,7 +397,10 @@ int ftp_execute_command(char **command_line_args)
         !strcmp(client_data->command_buffer, "command success"))
       ;
     else
-      LOG(ERROR, "Error recieving data from the server..");
+    {
+      LOG(ERROR, "%s", client_data->command_buffer);
+      return -1;
+    }
   }
 
   if (strcmp(command, "MKDIR") == 0)
