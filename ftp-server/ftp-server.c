@@ -270,7 +270,8 @@ void *client_thread(void *args)
 
     if (data->command_type == REQU)
     {
-      LOG(INFO, "REQU command received from the client.");
+      LOG(INFO, "REQU command received from client id: %d",
+          ci->client_socket_id);
       execute_commands(ci->client_socket_id, data);
     }
     else
