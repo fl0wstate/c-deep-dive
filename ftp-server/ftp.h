@@ -86,7 +86,14 @@ enum COMMANDS
   LS,
   PUT,
   MKDIR,
-  RM
+  RM,
+  EXIT,
+  HELP,
+  SPACE,
+  UNDO,
+  CLOSE,
+  CL,
+  CMD_LEN
 };
 
 /* LOGS */
@@ -96,6 +103,7 @@ int create_a_socket(char *port);
 /* utility functions */
 struct client_info *client_info_storage(u_int8_t socket_fd,
                                         u_int8_t connection_id);
+void to_upper(char *str);
 
 /* network packet handler */
 void packet_initializer(struct network_packet *);
@@ -116,4 +124,5 @@ off_t get_file_size(FILE *fp);
 /* multithreading*/
 void *client_thread(void *args);
 
+int validate_input(char *, enum COMMANDS *);
 #endif

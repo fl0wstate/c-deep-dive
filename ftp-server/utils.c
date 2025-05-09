@@ -1,5 +1,9 @@
 #include "ftp.h"
 
+static char cmd_array[CMD_LEN][10] = {
+    "CONNECT", "GET",  "CD",   "PWD",   "LS",   "PUT",   "MKDIR",
+    "RM",      "EXIT", "HELP", "SPACE", "UNDO", "CLOSE", "CL"};
+
 static size_t size_packet = sizeof(struct network_packet);
 struct client_info *client_info_storage(u_int8_t socket_fd,
                                         u_int8_t connection_id)
@@ -116,4 +120,31 @@ off_t get_file_size(FILE *fp)
 
   LOG(ERROR, "Error reading file");
   return -1;
+}
+
+/* I should use a function pointer instead */
+int validate_input(char *input, enum COMMANDS *cmd)
+{
+  u_int8_t i = 0;
+
+  for (; i < CMD_LEN; i++)
+  {
+    if (strcmp(input, cmd_array[i]) == 0)
+    {
+      *cmd = (enum COMMANDS)i;
+      return 1;
+    }
+  }
+  return (0);
+}
+
+void to_upper(char *str)
+{
+  u_int8_t offset = 'a' - 'A';
+
+  while (*str)
+  {
+    *str = (*str >= 'a' && *str <= 'z') ? *str - offset : *str;
+    str++;
+  }
 }

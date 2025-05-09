@@ -7,75 +7,16 @@
 #include <string.h>
 #include <sys/types.h>
 
-#ifdef PROC
-/* multiprocessing */
-if (!fork())
-{
-  LOG(DEBUG, "You are in the child process...");
-
-  close(server_socket);
-
-  while (1)
-  {
-    /* create space for the network packet */
-    int byte_reads = 0;
-    struct network_packet *data =
-        (struct network_packet *)malloc(sizeof(struct network_packet));
-
-    if (!data)
-    {
-      LOG(ERROR, "Malloc failed, server is shutting down...");
-      exit(EXIT_FAILURE);
-    }
-
-    byte_reads = recv(client_socket, data, sizeof(struct network_packet), 0);
-
-    if (byte_reads <= 0)
-    {
-      LOG(ERROR, "Read error.");
-      LOG(ERROR, "Client connection closed unexpectadely...");
-      break;
-    }
-
-    /* print_packet(data); */
-
-    /* command type being sent is a Termination signal */
-    if (data->command_type == TERM)
-    {
-      terminate_connection(data, client_socket);
-      free(data);
-      break;
-    }
-
-    /* attach a unique connection id to the current connected client */
-    if (data->connection_id == 0)
-      data->connection_id = ci->client_connection_id;
-
-    if (data->command_type == REQU)
-    {
-      LOG(INFO, "You sent a REQU command");
-      execute_commands(ci->client_socket_id, data);
-    }
-    else
-    {
-      LOG(ERROR, "Error handling the packet...closing the connection");
-      terminate_connection(data, ci->client_socket_id);
-    }
-
-    free(data);
-  }
-}
-#endif
-/* char *ftp_banner = */
-/*     "\n  █████▒██▓     ▒█████   █     █░  █████▒▄▄▄█████▓ ██▓███     " */
-/*     "\n▓██   ▒▓██▒    ▒██▒  ██▒▓█░ █ ░█░▓██   ▒ ▓  ██▒ ▓▒▓██░  ██▒   " */
-/*     "\n▒████ ░▒██░    ▒██░  ██▒▒█░ █ ░█ ▒████ ░ ▒ ▓██░ ▒░▓██░ ██▓▒   " */
-/*     "\n░▓█▒  ░▒██░    ▒██   ██░░█░ █ ░█ ░▓█▒  ░ ░ ▓██▓ ░ ▒██▄█▓▒ ▒ ▒ " */
-/*     "\n░▒█░   ░██████▒░ ████▓▒░░░██▒██▓ ░▒█░      ▒██▒ ░ ▒██▒ ░  ░ ░ " */
-/*     "\n ▒ ░   ░ ▒░▓  ░░ ▒░▒░▒░ ░ ▓░▒ ▒   ▒ ░      ▒ ░░   ▒▓▒░ ░  ░ ░ " */
-/*     "\n ░     ░ ░ ▒  ░  ░ ▒ ▒░   ▒ ░ ░   ░          ░    ░▒ ░        " */
-/*     "\n ░ ░     ░ ░   ░ ░ ░ ▒    ░   ░   ░ ░      ░      ░░        ░ " */
-/*     "\n           ░  ░    ░ ░      ░                               "; */
+static char ftp_banner[2048] =
+    "\n  █████▒██▓     ▒█████   █     █░  █████▒▄▄▄█████▓ ██▓███     "
+    "\n▓██   ▒▓██▒    ▒██▒  ██▒▓█░ █ ░█░▓██   ▒ ▓  ██▒ ▓▒▓██░  ██▒   "
+    "\n▒████ ░▒██░    ▒██░  ██▒▒█░ █ ░█ ▒████ ░ ▒ ▓██░ ▒░▓██░ ██▓▒   "
+    "\n░▓█▒  ░▒██░    ▒██   ██░░█░ █ ░█ ░▓█▒  ░ ░ ▓██▓ ░ ▒██▄█▓▒ ▒ ▒ "
+    "\n░▒█░   ░██████▒░ ████▓▒░░░██▒██▓ ░▒█░      ▒██▒ ░ ▒██▒ ░  ░ ░ "
+    "\n ▒ ░   ░ ▒░▓  ░░ ▒░▒░▒░ ░ ▓░▒ ▒   ▒ ░      ▒ ░░   ▒▓▒░ ░  ░ ░ "
+    "\n ░     ░ ░ ▒  ░  ░ ▒ ▒░   ▒ ░ ░   ░          ░    ░▒ ░        "
+    "\n ░ ░     ░ ░   ░ ░ ░ ▒    ░   ░   ░ ░      ░      ░░        ░ "
+    "\n           ░  ░    ░ ░      ░                               \n";
 
 static int connected = 0;
 
@@ -157,7 +98,7 @@ int ftp_execute_command(char **command_line_args)
   client_data->connection_id = 0;
   client_data->command_len = 0;
 
-  if (strcmp(command, "connect") == 0)
+  if (strcmp(command, "CONNECT") == 0)
   {
     char *address = command_line_args[1];
     if (address)
@@ -194,14 +135,15 @@ int ftp_execute_command(char **command_line_args)
     }
   }
 
+  if (!connected)
+  {
+    LOG(ERROR, "Not connected to a server. Use 'connect' first.");
+    free(client_data);
+    return -1;
+  }
+
   if (strcmp(command, "PWD") == 0)
   {
-    if (!connected)
-    {
-      LOG(ERROR, "Not connected to a server. Use 'connect' first.");
-      free(client_data);
-      return -1;
-    }
 
     client_data->command_id = PWD;
 
@@ -222,47 +164,34 @@ int ftp_execute_command(char **command_line_args)
 
   if (strcmp(command, "HELP") == 0)
   {
-    /* char *helpString; */
-    const char *helpString1 = "Welcome to the help page!";
-    fprintf(stdout, "%s\n", helpString1);
-
-    /* helpString = */
-    /*     "Usage client [Address]." */
-    /*     "\nCOMMANDS:" */
-    /*     "\n\t quit \t\t\t- Disconnect from the server and exit the client."
-     */
-    /*     "\n\t connect (address) \t- Connect to a FTP server specifed at the "
-     */
-    /*     "given addres. " */
-    /*     "\n\t pwd \t\t\t- Print the current working directory on the server.
-     * " */
-    /*     "\n\t cd (path) \t\t- Change the directory on the server to the " */
-    /*     "specified path. " */
-    /*     "\n\t ls \t\t\t- List the contents of the working directory on the "
-     */
-    /*     "server. " */
-    /*     "\n\t retrieve (file) [path]\t- Recieve a file that is hosted on the
-     * " */
-    /*     "server. " */
-    /*     "\n\t\t\t\t The first argument is file you want to recieve, " */
-    /*     "\n\t\t\t\t and the second argument is an option to specify " */
-    /*     "\n\t\t\t\t where the file should be saved to. " */
-    /*     "\n\t space \t\t\t- Get the disk space available on the server. " */
-    /*     "\n\t get (file) [path]\t- Get(download) file from the remote server
-     * " */
-    /*     "to your local machine" */
-    /*     "\n\t put (file) [path]\t- Get(upload) file from the locally " */
-    /*     "to the remote server" */
-    /*     "\n\t mkdir \t\t\t- Create a directory on the server." */
-    /*     "\n\t undo \t\t\t- Undo the last command." */
-    /*     "\n\t close \t\t\t- to terminate a connection with another computer."
-     */
-    /*     "\n\t rename (path) (new)\t- Rename the specifed file. " */
-    /*     "\n\t rm (path) (new)\t- Delete the specifed file. " */
-    /*     "\n\t help \t\t\t- displays this help message "; */
-
-    /**/
-    /* printf("%s\n", helpString); */
+    char helpString[2048] =
+        "Usage client [Address]."
+        "\nCOMMANDS:"
+        "\n\t quit \t\t\t- Disconnect from the server and exit the client"
+        "\n\t connect (address) \t- Connect to a FTP server specifed at the "
+        "given addres. "
+        "\n\t pwd \t\t\t- Print the current working directory on the server."
+        "\n\t cd (path) \t\t- Change the directory on the server to the "
+        "specified path. "
+        "\n\t ls \t\t\t- List the contents of the working directory on the "
+        "server. "
+        "\n\t retrieve (file) [path]\t- Recieve a file that is hosted on the"
+        "server. "
+        "\n\t\t\t\t The first argument is file you want to recieve, "
+        "\n\t\t\t\t and the second argument is an option to specify "
+        "\n\t\t\t\t where the file should be saved to. "
+        "\n\t space \t\t\t- Get the disk space available on the server. "
+        "\n\t get (file) [path]\t- Get(download) file from the remote server"
+        "to your local machine"
+        "\n\t put (file) [path]\t- Get(upload) file from the locally "
+        "to the remote server"
+        "\n\t mkdir \t\t\t- Create a directory on the server."
+        "\n\t undo \t\t\t- Undo the last command."
+        "\n\t close \t\t\t- to terminate a connection with another computer"
+        "\n\t rename (path) (new)\t- Rename the specifed file. "
+        "\n\t rm (path) (new)\t- Delete the specifed file. "
+        "\n\t help \t\t\t- displays this help message ";
+    printf("%s\n", helpString);
   }
 
   if (strcmp(command, "EXIT") == 0)
@@ -310,7 +239,10 @@ int ftp_execute_command(char **command_line_args)
   {
     FILE *fp = fopen(command_line_args[1], "wb");
     if (!fp)
+    {
       LOG(ERROR, "Error opening file....");
+      return -1;
+    }
 
     client_data->command_id = GET;
 
@@ -346,7 +278,10 @@ int ftp_execute_command(char **command_line_args)
     FILE *fp = fopen(command_line_args[1], "rb");
 
     if (!fp)
+    {
       LOG(ERROR, "Error opening local file...");
+      return -1;
+    }
 
     client_data->command_id = PUT;
 
@@ -366,21 +301,15 @@ int ftp_execute_command(char **command_line_args)
       {
         client_data->command_len = x;
         client_data->command_type = DATA;
-        /* error handle the send_packet command */
+        /*TODO: error handle the send_packet command */
         send_packet(client_data, connected, "PUT");
         total_read += x;
       }
 
-      LOG(DEBUG, "Size of the file: %d", get_file_size(fp));
-      LOG(DEBUG, "Size of data transfered: %zu", total_read);
-
+      LOG(INFO, "Size of the file: %d", get_file_size(fp));
       fclose(fp);
       end_of_transfer(client_data, connected);
     }
-  }
-
-  if (strcmp(command, "CLOSE") == 0)
-  {
   }
 
   if (strcmp(command, "CD") == 0)
@@ -460,10 +389,25 @@ int ftp_execute_command(char **command_line_args)
       LOG(ERROR, "Error recieving data from the server..");
   }
 
-  if (strcmp(command, "") == 0)
+  if (strcmp(command, "CLOSE") == 0)
   {
+    LOG(INFO, "Comming soon...(x.x)~");
   }
 
+  if (strcmp(command, "UNDO") == 0)
+  {
+    LOG(INFO, "Comming soon...(^.^!)~");
+  }
+
+  if (strcmp(command, "SPACE") == 0)
+  {
+    LOG(INFO, "Comming soon...(>.<!)~");
+  }
+
+  if (strcmp(command, "") == 0)
+  {
+    LOG(INFO, "Comming soon...(-.-!)~");
+  }
   free(client_data);
   return (0);
 }
@@ -579,7 +523,7 @@ char *ftp_getline(int len, FILE *stream)
 /* handling the commands inputed by the user */
 void ftp_cli_parser()
 {
-  /* fprintf(stdout, "%s", ftp_banner); */
+  fprintf(stdout, "%s", ftp_banner);
   putchar('\n');
 
   /* remove the socket_fd here and move it inside the ftp_execute_command */
@@ -587,17 +531,20 @@ void ftp_cli_parser()
 
   while (1)
   {
+    enum COMMANDS cmd;
     char *command_line;
     char **command_line_args;
-    int commands_len = 0;
+    /* int commands_len = 0; */
 
     if (connected)
     {
-      fprintf(stdout, ANSI_COLOR_YELLOW "ftp>.< " ANSI_RESET_ALL);
+      fprintf(stdout,
+              "fftp-[" ANSI_COLOR_CYAN "online" ANSI_RESET_ALL "]  ");
     }
     else
     {
-      fprintf(stdout, "ftp>> ");
+      fprintf(stdout,
+              "fftp-[" ANSI_COLOR_RED "offline!" ANSI_RESET_ALL "]  ");
     }
 
     fflush(stdout);
@@ -620,8 +567,20 @@ void ftp_cli_parser()
     if (!command_line_args)
       continue;
 
-    for (; command_line_args[commands_len] != NULL; commands_len++)
-      LOG(DEBUG, "command: %s", command_line_args[commands_len]);
+    if (validate_input(command_line_args[0], &cmd))
+      ;
+    else
+    {
+      LOG(ERROR, "Invalid command...%s", command_line_args[0]);
+      to_upper(command_line_args[0]);
+      if (validate_input(command_line_args[0], &cmd))
+        LOG(INFO, "Did you mean this \"%s\" command instead",
+            command_line_args[0]);
+      continue;
+    }
+    /* command_line_args[0] =  */
+    /* for (; command_line_args[commands_len] != NULL; commands_len++) */
+    /*   LOG(DEBUG, "command: %s", command_line_args[commands_len]); */
 
     if (ftp_execute_command(command_line_args) == 1)
     {

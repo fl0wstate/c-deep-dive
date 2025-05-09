@@ -1,7 +1,7 @@
 # Simple make file for compiling specific source files
 # make a simple list in the make fi
 cc = gcc
-flags = -Wall -Werror -pedantic -std=c89 -g
+flags = -Wall -Werror -Wno-overlength-strings -pedantic -std=c89 -g
 cli = ./cli_ftp_client.c ./log.c ./utils.c
 cl = ./ftp-client.c ./log.c # don't forget to add the utils.c
 ser = ./ftp-server.c ./log.c ./utils.c
