@@ -113,7 +113,7 @@ int ftp_execute_command(char **command_line_args)
       }
       else
       {
-        LOG(INFO, "Connection to the server has been established...");
+        LOG(INFO, "This client %d is connected to server.", connected);
 
         recv_data(connected, client_data);
 
@@ -131,7 +131,7 @@ int ftp_execute_command(char **command_line_args)
     }
     else
     {
-      LOG(ERROR, "missing address argument <conect> <address>");
+      LOG(ERROR, "Missing address argument <conect> <address>");
     }
   }
 
@@ -154,7 +154,7 @@ int ftp_execute_command(char **command_line_args)
     if (client_data->command_type == DATA && client_data->command_id == PWD &&
         strlen(client_data->command_buffer) > 0)
     {
-      LOG(INFO, "[DATA]: %s", client_data->command_buffer);
+      LOG(INFO, "%s", client_data->command_buffer);
     }
     else
     {

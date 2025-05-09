@@ -29,7 +29,7 @@ void execute_commands(u_int8_t socket_fd, struct network_packet *client_data)
         sizeof(struct network_packet))
       LOG(ERROR, "Sending Packets");
 
-    LOG(DEBUG, "You are supposed to print the current working directory");
+    LOG(DEBUG, "Returning the current server working directory");
     break;
   }
 
@@ -60,6 +60,7 @@ void execute_commands(u_int8_t socket_fd, struct network_packet *client_data)
                     0)) != sizeof(struct network_packet))
         LOG(ERROR, "Sending LS Packets");
     }
+    LOG(DEBUG, "Returned a list of all the files and directory in cwd");
     end_of_transfer(client_data, socket_fd);
     break;
   }
@@ -102,6 +103,7 @@ void execute_commands(u_int8_t socket_fd, struct network_packet *client_data)
         LOG(DEBUG, "this bytes were sent over the network... %d", x);
       }
     }
+    LOG(DEBUG, "Reading file data from the server to the client");
     fclose(fpr);
     end_of_transfer(client_data, socket_fd);
     break;
@@ -131,6 +133,7 @@ void execute_commands(u_int8_t socket_fd, struct network_packet *client_data)
       }
       recv_data(socket_fd, client_data);
     }
+    LOG(DEBUG, "Writing file data to the server from the client");
     fclose(fp);
     break;
   }
@@ -159,6 +162,7 @@ void execute_commands(u_int8_t socket_fd, struct network_packet *client_data)
       strcpy(temp_buffer, "fail");
     }
 
+    LOG(DEBUG, "Created a New directory on the server cwd");
     client_data->command_type = INF;
 
     strcpy(client_data->command_buffer, temp_buffer);
@@ -192,6 +196,7 @@ void execute_commands(u_int8_t socket_fd, struct network_packet *client_data)
       send_packet(client_data, socket_fd, "CD");
       break;
     }
+    LOG(DEBUG, "Return the current working directory to the client");
     sprintf(client_data->command_buffer, "command success");
     send_packet(client_data, socket_fd, "CD");
     break;
@@ -214,6 +219,8 @@ void execute_commands(u_int8_t socket_fd, struct network_packet *client_data)
           client_data->command_buffer);
       sprintf(client_data->command_buffer, "failed");
     }
+
+    LOG(DEBUG, "Removed File|Dir on the server");
     send_packet(client_data, socket_fd, "RM");
     break;
   }
@@ -263,7 +270,7 @@ void *client_thread(void *args)
 
     if (data->command_type == REQU)
     {
-      LOG(INFO, "You sent a REQU command");
+      LOG(INFO, "REQU command received from the client.");
       execute_commands(ci->client_socket_id, data);
     }
     else
@@ -396,7 +403,7 @@ int main(int argc, char *argv[])
     if (client_socket)
     {
       client_connection_id++;
-      LOG(INFO, "Client connection has been established");
+      LOG(INFO, "New client connection has been established");
       ci = client_info_storage(client_socket, client_connection_id);
     }
 
