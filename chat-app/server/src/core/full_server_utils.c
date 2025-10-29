@@ -1,5 +1,6 @@
 #include "../includes/server.h"
 
+// TODO: this needs to go to the utils folder
 void LOG_LEVEL(logll level, const char *msg)
 {
   switch (level)
@@ -48,11 +49,19 @@ void init_pollfd(struct pollfd *pollfds[], uint32_t *n_pollfds,
 uint32_t create_server(uint32_t port)
 {
   int server_fd;
+  int opt = 1;
   struct sockaddr_in server_addr = {0};
 
   server_fd = socket(AF_INET, SOCK_STREAM, 0);
   if (server_fd < 0)
     handle_errror(server_fd, "socket");
+
+  if (setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR | SO_REUSEPORT, &opt,
+                 sizeof(opt)))
+  {
+    perror("setsockopt");
+    exit(EXIT_FAILURE);
+  }
 
   server_addr.sin_family = AF_INET;
   server_addr.sin_addr.s_addr = INADDR_ANY;
@@ -84,7 +93,6 @@ void accept_connections(int server_fd, struct pollfd **pollfds,
   int status;
   char msg_buffer[BUFSIZ];
 
-  /* accept connections */
   if ((client_fd = accept(server_fd, NULL, NULL)) < 0)
     handle_errror(server_fd, "accept");
 
@@ -92,17 +100,17 @@ void accept_connections(int server_fd, struct pollfd **pollfds,
   add_clients_to_poll(pollfds, client_fd, n_pollfds, max_pollfds);
 
   LOG("[INFO] Accepted new connection from: [%d]\n", client_fd);
-  /* set the buffer for writting the messages */
+  /*TODO: this is where you will need apply the data compression algo set the
+   * buffer for writting the messages */
   memset(&msg_buffer, 0, BUFSIZ);
   sprintf(
       msg_buffer,
       "[INFO] Client connections established by this file descriptor: [%d]\n",
       client_fd);
 
-  /* send the message */
   status = send(client_fd, (void *)&msg_buffer, strlen(msg_buffer), 0);
   if (status < 0)
-    handle_errror(client_fd, "send");
+    handle_errror(client_fd, "Sending data to client Error");
 }
 
 /**
@@ -145,7 +153,7 @@ void read_from_client(struct pollfd **pollfds, uint32_t client_fd,
      */
     LOG("[INFO] From: [%d]\n[MESSAGE]: %s\n", client_fd, buffer);
     memset(&msg_buffer, 0, sizeof(msg_buffer));
-    sprintf(msg_buffer, "%s^", buffer);
+    sprintf(msg_buffer, "%s", buffer);
     for (int j = 0; j < (*n_pollfds); j++)
     {
       if ((*pollfds)[j].fd != client_fd && (*pollfds)[j].fd != server_fd)

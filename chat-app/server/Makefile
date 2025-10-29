@@ -1,16 +1,17 @@
-# Simple make file for compiling specific source files
-# make a simple list in the make fi
 cc = clang
 flags = -Wall -Werror -pedantic -std=c99 -g
-fl = ./src/full_server.c ./src/full_server_utils.c
+fl = ./src/main.c ./src/core/full_server_utils.c
 obj = $(fl:.c=.o)
-binary = bin
+BIN_DIR = build
+HEADER = ./includes/server.h
 
-all: $(binary)
+all: $(BIN_DIR)
 
-$(binary): $(obj) ./includes/server.h
-	$(cc) $(flags) $^
+$(BIN_DIR):  $(obj)
+	$(CC) $^ -o $(BIN_DIR)/$@
+
+
 clean:
-	rm -rf $(binary) $(wildcard ./src/*.o)
+	rm -rf ./build/build $(wildcard ./src/*.o) $(wildcard ./src/core/*.o)
 
 .PHONE: all clean
