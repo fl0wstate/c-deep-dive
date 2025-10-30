@@ -150,6 +150,8 @@ void read_from_client(struct pollfd **pollfds, uint32_t client_fd,
   {
     /* Broadcast everything to all the other fds except the client who sent the
      * message and the server socket
+     * this is the bottle neck, you are broadcasting the message to all the
+     * listening connections
      */
     LOG("[INFO] From: [%d]\n[MESSAGE]: %s\n", client_fd, buffer);
     memset(&msg_buffer, 0, sizeof(msg_buffer));
@@ -196,7 +198,6 @@ void add_clients_to_poll(struct pollfd *pollfds[], uint32_t new_client_fd,
  * del_client_from_poll - This function behaves like it's deleting a file
  * descriptor from pollfds, but instead fills up the space with the last
  * connected clients fd
- * @pollfds: pointer to an array of client_fd that are currently connected to
  * @n_pollfds: pointer to the number of connected client_fd in the server
  * @client_fd: the client file descriptor to be deleted from the pollfds array
  * Return: void
