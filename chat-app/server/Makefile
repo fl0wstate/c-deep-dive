@@ -1,5 +1,5 @@
 cc = clang
-flags = -Wall -Werror -pedantic -std=c99 -g
+flags = -Wall -Werror -O2 -pedantic -std=c99 -g
 
 poll = ./src/main.c ./src/core/poll_server.c
 poll_obj = $(poll:.c=.o)
