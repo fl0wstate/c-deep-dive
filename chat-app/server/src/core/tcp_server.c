@@ -6,7 +6,6 @@
 #include <sys/socket.h>
 
 #include "../includes/epoll_server.h"
-#include "../includes/log.h"
 
 // Testing the codebase layout
 void epoll_server(void) { LOG(INFO, "hello world"); }
@@ -17,31 +16,32 @@ int tcp_server()
   struct sockaddr_in server_address = {0};
 
   socket_fd = socket(AF_INET, SOCK_STREAM | SOCK_NONBLOCK, 0);
+  if (socket_fd == -1)
   {
     LOG(ERROR, "Failed to spawn a socket: %s");
     exit(EXIT_FAILURE);
   }
 
   protocol_opt = 1;
-  if (setsockopt(socket_fd, SO_REUSEPORT, protocol_opt, &protocol_opt,
-                 sizeof(protocol_opt)))
+  if (setsockopt(socket_fd, SOL_SOCKET, SO_REUSEADDR, &protocol_opt,
+                 sizeof(protocol_opt)) == -1)
   {
     LOG(ERROR, "Failed to set socket protocol");
     exit(EXIT_FAILURE);
   }
 
   server_address.sin_family = AF_INET;
-  server_address.sin_addr.s_addr = INADDR_LOOPBACK;
+  server_address.sin_addr.s_addr = INADDR_ANY;
   server_address.sin_port = htons(7000);
 
   if (bind(socket_fd, (struct sockaddr *)&server_address,
-           sizeof(server_address)) < 0)
+           sizeof(server_address)) == -1)
   {
     LOG(ERROR, "Bind error");
     exit(EXIT_FAILURE);
   }
 
-  if (listen(socket_fd, 100) < 0)
+  if (listen(socket_fd, 100) == -1)
   {
     LOG(ERROR, "Listen error");
     exit(EXIT_FAILURE);

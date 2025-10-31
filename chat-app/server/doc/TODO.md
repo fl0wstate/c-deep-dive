@@ -25,6 +25,7 @@
     - Use `accept4(..., SOCK_NONBLOCK)`.
     - After accept, set `TCP_NODELAY`.
     - Use `epoll` in level-triggered mode first.
+    - Create a simple log system that shows exactly where the error occurred.
 
 - [ ] Task 1.2: Add graceful signal handling
   - Use `signalfd` in the loop to stop the server gracefully.
@@ -116,5 +117,3 @@ What I’ll do next when you pick an option
 - If you pick A/C: I’ll immediately produce the test files or TODO file (as small files) so you can run them locally.
 - If you pick B: I’ll wait for you to paste your code or ask for the first hint; then I’ll review and iterate.
 - If you pick D: I’ll post focused pseudocode and a short checklist for that task.
-
-Which option do you want me to do now? (A, B, C, or D and which task)

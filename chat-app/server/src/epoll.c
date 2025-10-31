@@ -1,21 +1,21 @@
-#include "./includes/epoll_server.h"
-#include "includes/server.h"
 #include <asm-generic/errno-base.h>
 #include <stdlib.h>
 #include <sys/epoll.h>
+
+#include "./includes/epoll_server.h"
 
 int main(void)
 {
 
   int ret, event, acc;
-  char buffer[100];
+  char buffer[1024];
   struct epoll_event events[10];
 
   epoll_server();
-  int server_sock = create_server(3404);
+  int server_sock = tcp_server();
   int epoll_fd = epoll_setup(server_sock);
 
-  memset(&buffer, 0, 100);
+  memset(&buffer, 0, 1024);
   memset(&events, 0, sizeof(events));
 
   // Entry Point

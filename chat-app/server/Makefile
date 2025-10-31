@@ -5,7 +5,7 @@ poll = ./src/main.c ./src/core/poll_server.c
 poll_obj = $(poll:.c=.o)
 
 # compile epoll files only
-epoll = ./src/epoll.c ./src/core/epoll_server.c ./src/utils/log.c
+epoll = ./src/epoll.c ./src/core/epoll.c ./src/core/tcp_server.c ./src/utils/log.c
 epoll_obj = $(epoll:.c=.o)
 
 BIN_DIR = build
@@ -22,6 +22,6 @@ epoll:  $(epoll_obj)
 
 
 clean:
-	rm -rf ./build/build $(wildcard ./src/*.o) $(wildcard ./src/core/*.o) $(wildcard ./src/utils/*.o)
+	rm -rf ./build/* $(wildcard ./src/*.o) $(wildcard ./src/core/*.o) $(wildcard ./src/utils/*.o)
 
 .PHONE: all clean

@@ -1,3 +1,4 @@
+#define _GNU_SOURCE
 #include <asm-generic/errno-base.h>
 #include <errno.h>
 #include <fcntl.h>
